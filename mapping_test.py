@@ -27,11 +27,11 @@ def check(input_file):
         for line, line_index in enumerate(file,start=1):
             if line.startswith("@"):
                 if line.startswith("@SQ"):
-                    if "SN:" not in line or "LN:" not in line:
+                    if "SN:" not in line or "LN:" not in line: # Check for mandatory tags
                         print(f"Erreur de format à la ligne {line_index}: @SQ doit contenir SN: et LN:.")
                         sys.exit(1)
             else:
-                if line.split("\t") < 11:
+                if line.split("\t") < 11: # Check for number of columns
                     print(f"Erreur de format à la ligne {line_index}: moins de 11 colonnes.")
                     sys.exit(1)
 
