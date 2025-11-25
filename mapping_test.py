@@ -10,7 +10,7 @@ def check(input_file):
         sys.exit(1)
     print("Exists and format check OK")
 
-    with open("input_file", "r") as file: #ouverture du fichier en lecture
+    with open(input_file, "r") as file: #ouverture du fichier en lecture
         for line, line_index in enumerate(file,start=1):
             if line.startswith("@"):
                 if line.startswith("@SQ"):
@@ -18,7 +18,7 @@ def check(input_file):
                         print(f"Erreur de format à la ligne {line_index}: @SQ doit contenir SN: et LN:.")
                         sys.exit(1)
             else:
-                if line.split("\t") < 11: # Check for number of columns
+                if len(line.split("\t")) < 11: # Check for number of columns
                     print(f"Erreur de format à la ligne {line_index}: moins de 11 colonnes.")
                     sys.exit(1)
 
