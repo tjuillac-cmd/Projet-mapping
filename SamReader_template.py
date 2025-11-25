@@ -40,7 +40,20 @@ import os, sys, re ....
 
 ## 1/ Check, 
 
+if len(sys.argv) != 2:
+    print("Usage: python3 SamReader_template.py <sam_file>")
+    sys.exit(1)
+elif sys.argv[1].endswith(".sam") == False:
+    print("Le fichier doit être au format .sam")
+    sys.exit(1)
+else:
+    print("Check OK")
+
 ## 2/ Read, 
+
+sam_file = sys.argv[1] # Get the SAM file name from command line arguments
+mapping = open(sam_file, "r")
+lines=mapping.readlines() #lecture de toutes les lignes du fichier
 
 ## 3/ Store,
 
