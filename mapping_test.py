@@ -48,8 +48,8 @@ def check(input_file):
                     print(f"Erreur de format à la ligne {line_index}: {name} doit être un entier.")
                     sys.exit(1)
 
-            # Check for mandatory string fields
-            for value, name in [(rname, "RNAME"), (seq, "SEQ")]:
+            # # Check for mandatory string fields
+            # for value, name in [(rname, "RNAME"), (seq, "SEQ")]:
                 
 
 
