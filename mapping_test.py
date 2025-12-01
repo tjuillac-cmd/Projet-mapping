@@ -3,24 +3,22 @@ import sys,os
 def check(input_file):
     '''
     Check if the input file exists and is in .sam format.
-    Also verifies that each alignment line (non-header) contains at least 11 columns as required by the SAM format specification.
+    Verifies that each alignment line (non-header) contains at least the 11 "mandatory" fields
     '''
     if not os.path.exists(input_file):
-        print("Aucun fichier trouvé")
-        sys.exit(1)
-        print("Aucun fichier trouvé")
+        print("No file found")
         sys.exit(1)
     if not input_file.endswith(".sam"):
-        print("Le fichier doit être au format .sam")
+        print("File must be in .sam format")
         sys.exit(1)
     print("Exists and format check OK")
 
-    with open(input_file, "r") as file: #ouverture du fichier en lecture
+    with open(input_file, "r") as file: #open file in read mode
         for line_index, line in enumerate(file,start=1):
-            if line.startswith("@"):
+            if line.startswith("@"): #check header
                 if line.startswith("@SQ"):
-                    if "SN:" not in line or "LN:" not in line: # Check for mandatory tags
-                        print(f"Erreur de format à la ligne {line_index}: @SQ doit contenir SN: et LN:.")
+                    if "SN:" not in line or "LN:" not in line: #check for mandatory fields
+                        print(f"Error at line {line_index}: @SQ must contain SN: and LN:.")
                         sys.exit(1)
                 continue
 
@@ -29,7 +27,7 @@ def check(input_file):
 
             # Check for at least 11 mandatory fields
             if len(columns) < 11:
-                print(f"Erreur de format à la ligne {line_index}: moins de 11 champs (seulement {len(columns)}).")
+                print(f"Format error at line {line_index}: less than 11 fields.")
                 sys.exit(1)
 
             # Unpack the first 11 mandatory fields
@@ -37,7 +35,7 @@ def check(input_file):
 
             # Check for empty mandatory fields
             if any(field == "" for field in columns[:11]):
-                print(f"Erreur de format à la ligne {line_index}: un des 11 champs obligatoires est vide.")
+                print(f"Format error at line {line_index}: one of the 11 mandatory fields is empty.")
                 sys.exit(1)
 
             # Check for mandatory numeric fields
@@ -45,7 +43,7 @@ def check(input_file):
                 try:
                     int(value)
                 except ValueError:
-                    print(f"Erreur de format à la ligne {line_index}: {name} doit être un entier.")
+                    print(f"Format error at line {line_index}: {name} must be an interger.")
                     sys.exit(1)
 
             # # Check for mandatory string fields
@@ -68,5 +66,5 @@ def main():
     check(input_file)
 
 
-if __name__ == "__main__":
-    main()
+#if __name__ == "__main__":
+#    main()
