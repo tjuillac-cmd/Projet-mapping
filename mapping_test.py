@@ -136,7 +136,7 @@ def check(input_file):
 def readFlag(input_file):
     dico_flag = {}
     with open(input_file, "r") as file: #open file in read mode
-        for line in enumerate(file,start=1):
+        for line in file:
             if line.startswith("@"): #skip header
                 continue
             columns = line.strip().split("\t")
@@ -147,24 +147,36 @@ def readFlag(input_file):
                 dico_flag[flag] += 1
             else:
                 dico_flag[flag] = 1
-    return dico_flag
+    print(dico_flag)
+    #return dico_flag
 
 
-def readQual(input_file):
-    dico_qual = {}
+def readQual(input_file,qual_threshold):
+    dico_qual = {f"below {qual_threshold}":0, f"above or equal {qual_threshold}":0}
     with open(input_file, "r") as file: #open file in read mode
-        for line in enumerate(file,start=1):
+        for line in file:
             if line.startswith("@"): #skip header
                 continue
             columns = line.strip().split("\t")
             qual = columns[10]
+            if qual == "*": #if qual score not known store directly
+                #Store qual in dico_qual
+                if qual in dico_qual:
+                    dico_qual[qual] += 1
+                else:
+                    dico_qual[qual] = 1
+            else: #convert qual to phred score, then calculate mean qual score and finally store it according to the filter
+                mean_qual = 0
+                for ascii in qual:
+                    mean_qual += ord(ascii) - 33
+                mean_qual = mean_qual / len(qual)
 
-            #Store qual in dico_qual
-            if qual in dico_qual:
-                dico_qual[qual] += 1
-            else:
-                dico_qual[qual] = 1
-
+                if mean_qual < qual_threshold:
+                    dico_qual[f"below {qual_threshold}"] += 1
+                else:
+                    dico_qual[f"above or equal {qual_threshold}"] += 1
+    print(dico_qual) 
+    #return dico_qual
 
 ## 4/ Analyse 
 
@@ -307,7 +319,8 @@ def main():
     input_file = sys.argv[1]
     if check(input_file):
         print("Format check OK")
-        read(input_file)
+        readQual(input_file,36)
+        readFlag(input_file)
 
 
 ############### LAUNCH THE SCRIPT ###############
