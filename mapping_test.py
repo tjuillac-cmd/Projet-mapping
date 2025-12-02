@@ -133,64 +133,62 @@ def check(input_file):
 
 ## 2/ Read, and 3/ Store,
 
-def readFlag(input_file):
-    dico_flag = {}
-    with open(input_file, "r") as file: #open file in read mode
+def sam_reader(input_file):
+    reads_info = {}
+    with open(input_file, "r") as file:
         for line in file:
-            if line.startswith("@"): #skip header
+            if line.startswith("@"): #skip header 
                 continue
             columns = line.strip().split("\t")
-            flag = columns[1]
+            
+            #extract useful fields
+            qname = columns[0]
+            flag = int(columns[1])
+            pos = int(columns[3])
+            mapq = int(columns[4])
 
-            #Store flag in dico_flag
-            if flag in dico_flag:
-                dico_flag[flag] += 1
-            else:
-                dico_flag[flag] = 1
-    print(dico_flag)
-    #return dico_flag
+            #extract chromosome from RNAME
+            chromosome = columns[2]
 
+            #store information in dictionary with chromosome as key
+            if chromosome not in reads_info.keys():
+                reads_info[chromosome] = []
 
-def readQual(input_file,qual_threshold):
-    dico_qual = {f"below {qual_threshold}":0, f"above or equal {qual_threshold}":0}
-    with open(input_file, "r") as file: #open file in read mode
-        for line in file:
-            if line.startswith("@"): #skip header
-                continue
-            columns = line.strip().split("\t")
-            qual = columns[10]
-            if qual == "*": #if qual score not known store directly
-                #Store qual in dico_qual
-                if qual in dico_qual:
-                    dico_qual[qual] += 1
-                else:
-                    dico_qual[qual] = 1
-            else: #convert qual to phred score, then calculate mean qual score and finally store it according to the filter
-                mean_qual = 0
-                for ascii in qual:
-                    mean_qual += ord(ascii) - 33
-                mean_qual = mean_qual / len(qual)
+            reads_info[chromosome].append((qname, flag, pos, mapq))
 
-                if mean_qual < qual_threshold:
-                    dico_qual[f"below {qual_threshold}"] += 1
-                else:
-                    dico_qual[f"above or equal {qual_threshold}"] += 1
-    print(dico_qual) 
-    #return dico_qual
+    #print(reads_info)
+    return reads_info
 
 ## 4/ Analyse 
 
-#### Convert the flag into binary ####
-# def flagBinary(flag) :
+# Combien de reads sont mappés ? # compter le nombre de reads en fonction du flag (colonne #2)
 
-#     flagB = bin(int(flag)) # Transform the integer into a binary.
-#     flagB = flagB[2:] # Remove '0b' Example: '0b1001101' > '1001101'
-#     flagB = list(flagB) 
-#     if len(flagB) < 12: # Size adjustement to 12 (maximal flag size)
-#         add = 12 - len(flagB) # We compute the difference between the maximal flag size (12) and the length of the binary flag.
-#         for t in range(add):
-#             flagB.insert(0,'0') # We insert 0 to complete until the maximal flag size.
-#     return flagB
+def readMapped(reads_info):
+    mapped_count = 0
+    unmapped_count = 0
+    read_count = 0
+    for chromosome in reads_info:
+        for read in reads_info[chromosome]:
+            flag = read[1]
+            flagB = flagBinary(flag)
+            read_count += 1
+            if int(flagB[-3]) == 0: # check if the read is mapped
+                mapped_count += 1
+            else:
+                unmapped_count += 1
+    return mapped_count, unmapped_count, read_count
+
+#### Convert the flag into binary ####
+def flagBinary(flag) :
+
+    flagB = bin(int(flag)) # Transform the integer into a binary.
+    flagB = flagB[2:] # Remove '0b' Example: '0b1001101' > '1001101'
+    flagB = list(flagB) 
+    if len(flagB) < 12: # Size adjustement to 12 (maximal flag size)
+        add = 12 - len(flagB) # We compute the difference between the maximal flag size (12) and the length of the binary flag.
+        for t in range(add):
+            flagB.insert(0,'0') # We insert 0 to complete until the maximal flag size.
+    return flagB
 
 
 #### Analyze the unmapped reads (not paired) ####
@@ -319,8 +317,10 @@ def main():
     input_file = sys.argv[1]
     if check(input_file):
         print("Format check OK")
-        readQual(input_file,36)
-        readFlag(input_file)
+        reads_info = sam_reader(input_file)
+        print(readMapped(reads_info))
+            
+            
 
 
 ############### LAUNCH THE SCRIPT ###############
