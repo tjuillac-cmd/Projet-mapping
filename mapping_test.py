@@ -129,16 +129,42 @@ def check(input_file):
             if not re.fullmatch(r'\*|[!-~]+', qual):
                 print(f"Format error at line {line_index}: QUAL incorrect.")
                 sys.exit(1)     
-    print("Format check OK")
+    return True
 
-## 2/ Read, 
+## 2/ Read, and 3/ Store,
 
-# def reader(input_file):
+def readFlag(input_file):
+    dico_flag = {}
+    with open(input_file, "r") as file: #open file in read mode
+        for line in enumerate(file,start=1):
+            if line.startswith("@"): #skip header
+                continue
+            columns = line.strip().split("\t")
+            flag = columns[1]
+
+            #Store flag in dico_flag
+            if flag in dico_flag:
+                dico_flag[flag] += 1
+            else:
+                dico_flag[flag] = 1
+    return dico_flag
 
 
+def readQual(input_file):
+    dico_qual = {}
+    with open(input_file, "r") as file: #open file in read mode
+        for line in enumerate(file,start=1):
+            if line.startswith("@"): #skip header
+                continue
+            columns = line.strip().split("\t")
+            qual = columns[10]
 
+            #Store qual in dico_qual
+            if qual in dico_qual:
+                dico_qual[qual] += 1
+            else:
+                dico_qual[qual] = 1
 
-## 3/ Store,
 
 ## 4/ Analyse 
 
@@ -279,7 +305,9 @@ def main():
         sys.exit(1)
 
     input_file = sys.argv[1]
-    check(input_file)
+    if check(input_file):
+        print("Format check OK")
+        read(input_file)
 
 
 ############### LAUNCH THE SCRIPT ###############
