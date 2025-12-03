@@ -209,131 +209,47 @@ def readFlag(reads_info):
 #### 3) Où les reads sont-ils mappés ? L'alignement est-il homogène le long de la séquence de référence ? # compter le nombre de reads par chromosome ####
 
 def readCHROM(reads_info):
-    dico_chrom = {key: 0 for key in reads_info.keys()} #create a counting dico with same keys as reads_info 
+    dico_chrom_mapped = {key: 0 for key in reads_info.keys()} #create a counting dico with same keys as reads_info 
+    dico_chrom_unmapped = {key: 0 for key in reads_info.keys()}
     for chromosome in reads_info:
         for read in reads_info[chromosome]:
             flagB = flagBinary(read[1])
             if int(flagB[-3]) == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
-                dico_chrom[chromosome] += 1
-    print(dico_chrom)
-    return dico_chrom
+                dico_chrom_mapped[chromosome] += 1
+            else:
+                dico_chrom_unmapped[chromosome] +=1
+    print(dico_chrom_mapped, dico_chrom_unmapped)
+    return dico_chrom_mapped, dico_chrom_unmapped
 
+#### 4) Avec quelle qualité les reads sont-ils mappés ? # compter le nombre de reads pour chaque valeur de qualité ou par tranche de valeurs (score de mapping) ####
 
-#### Analyze the unmapped reads (not paired) ####
-# def unmapped(sam_line):
-    
-#     unmapped_count = 0
-#     with open ("only_unmapped.fasta", "a+") as unmapped_fasta, open("summary_unmapped.txt", "w") as summary_file:
-#         for line in sam_line:
-#             col_line = line.split("\t")
-#             flag = flagBinary(col_line[1])
-
-#             if int(flag[-3]) == 1:
-#                 unmapped_count += 1
-#                 unmapped_fasta.write(toStringOutput(line))
-
-#         summary_file.write("Total unmapped reads: " + str(unmapped_count) + "\n") 
-#         return unmapped_count
-
-#### Analyze the partially mapped reads ####
-# def partiallyMapped(sam_line):
-    
-#     partially_mapped_count = 0
-
-#     with open ("only_partially_mapped.fasta", "a+") as partially_mapped_fasta, open("summary_partially_mapped.txt", "w") as summary_file:
-#         for line in sam_line:
-#             col_line = line.split("\t")
-#             flag = flagBinary(col_line[1]) # We compute the same 
-
-#             if int(flag[-2]) == 1: 
-#                 if col_line[5] != "100M":
-#                     partially_mapped_count += 1
-#                     partially_mapped_fasta.write(toStringOutput(line))
-
-#         summary_file.write("Total partially mapped reads: " + str(partially_mapped_count) + "\n") 
-#         return partially_mapped_count
-
-
-# ### Analyse the CIGAR = regular expression that summarise each read alignment ###
-# def readCigar(cigar): 
-   
-#     ext = re.findall('\w',cigar) # split cigar 
-#     key=[] 
-#     value=[]    
-#     val=""
-
-#     for i in range(0,len(ext)): # For each numeric values or alpha numeric
-#         if (ext[i] == 'M' or ext[i] == 'I' or ext[i] == 'D' or ext[i] == 'S' or ext[i] == 'H' or ext[i] == "N" or ext[i] == 'P'or ext[i] == 'X'or ext[i] == '=') :
-#             key.append(ext[i])
-#             value.append(val)
-#             val = ""
-#         else :
-#             val = "" + val + ext[i]  # Else concatenate in order of arrival
-    
-#     dico = {}
-#     n = 0
-#     for k in key:   # Dictionnary contruction in range size lists              
-#         if k not in dico.keys():    # for each key, insert int value
-#             dico[k] = int(value[n])   # if key not exist, create and add value
-#             n += 1
-#         else:
-#             dico[k] += int(value[n])  # inf key exist add value
-#             n += 1
-#     return dico
-
-# ### Analyse the CIGAR = regular expression that summarise each read alignment ###
-# def percentMutation(dico):
-        
-#     totalValue = 0 # Total number of mutations
-#     for v in dico :
-#         totalValue += dico[v]
-
-#     mutList = ['M','I','D','S','H','N','P','X','=']
-#     res = ""
-#     for mut in mutList : # Calculated percent of mutation if mut present in the dictionnary, else, percent of mut = 0
-#         if mut in dico.keys() :
-#             res += (str(round((dico[mut] * 100) / totalValue, 2)) + ";")
-#         else :
-#             res += ("0.00" + ";")
-#     return res
-
-# def globalPercentCigar():
-#     """
-#       Global representation of cigar distribution.
-#     """
-    
-#     with open ("outpuTable_cigar.txt","r") as outpuTable, open("Final_Cigar_table.txt", "w") as FinalCigar:
-#         nbReads, M, I, D, S, H, N, P, X, Egal = [0 for n in range(10)]
-
-#         for line in outpuTable :
-#             mutValues = line.split(";")
-#             nbReads += 2
-#             M += float(mutValues[2])+float(mutValues[12])
-#             I += float(mutValues[3])+float(mutValues[13])
-#             D += float(mutValues[4])+float(mutValues[14])
-#             S += float(mutValues[5])+float(mutValues[15])
-#             H += float(mutValues[6])+float(mutValues[16])
-#             N += float(mutValues[7])+float(mutValues[17])
-#             P += float(mutValues[8])+float(mutValues[18])
-#             X += float(mutValues[9])+float(mutValues[19])
-#             Egal += float(mutValues[10])+float(mutValues[20])
-
-#         FinalCigar.write("Global cigar mutation observed :"+"\n"
-#                         +"Alignlent Match : "+str(round(M/nbReads,2))+"\n"
-#                         +"Insertion : "+str(round(I/nbReads,2))+"\n"
-#                         +"Deletion : "+str(round(D/nbReads,2))+"\n"
-#                         +"Skipped region : "+str(round(S/nbReads,2))+"\n"
-#                         +"Soft Clipping : "+str(round(H/nbReads,2))+"\n"
-#                         +"Hard Clipping : "+str(round(N/nbReads,2))+"\n"
-#                         +"Padding : "+str(round(P/nbReads,2))+"\n"
-#                         +"Sequence Match : "+str(round(Egal/nbReads,2))+"\n"
-#                         +"Sequence Mismatch : "+str(round(X/nbReads,2))+"\n")
+def readMAPQ(reads_info,threshold):
+    above = f"MAPQ above {threshold}"
+    below = f"MAPQ below {threshold}"
+    read_mapq = {above : 0, below : 0}
+    for chromosome in reads_info:
+        for read in reads_info[chromosome]:
+            if read[3] >= threshold :
+                read_mapq[above] += 1
+            else:
+                read_mapq[below] += 1
+    print(read_mapq)
+    return read_mapq
 
 
  
 #### Summarise the results ####
 
-# def Summary(fileName):
+def Summary(fileName, dico_flag):
+    '''create a text file to summarize the results'''
+    with open(fileName, "w") as fileSummary: #open file in write mode
+        fileSummary.write("============ Summary of SAM file ============\n\n")
+        fileSummary.write("Reads per flag:\n")
+        for flag, count in dico_flag.items():
+            fileSummary.write(f"{flag} : {count} reads\n") #write each flag and its count
+        fileSummary.write("\n=============================================\n")
+        print(f"Summary written in {fileName}")
+
 
 #### Main function ####
 
@@ -349,6 +265,9 @@ def main():
         readMapped(reads_info)
         readFlag(reads_info)
         readCHROM(reads_info)
+        readMAPQ(reads_info,36)
+        dico_flag = readFlag(reads_info)
+        Summary("summary.txt", dico_flag)
             
             
 
