@@ -161,24 +161,9 @@ def sam_reader(input_file):
 
 ## 4/ Analyse 
 
-# Combien de reads sont mappés ? # compter le nombre de reads en fonction du flag (colonne #2)
+#### 1) Combien de reads sont mappés ? ####
 
-def readMapped(reads_info):
-    mapped_count = 0
-    unmapped_count = 0
-    read_count = 0
-    for chromosome in reads_info:
-        for read in reads_info[chromosome]:
-            flag = read[1]
-            flagB = flagBinary(flag)
-            read_count += 1
-            if int(flagB[-3]) == 0: # check if the read is mapped
-                mapped_count += 1
-            else:
-                unmapped_count += 1
-    return mapped_count, unmapped_count, read_count
-
-#### Convert the flag into binary ####
+#Convert the flag into binary
 def flagBinary(flag) :
 
     flagB = bin(int(flag)) # Transform the integer into a binary.
@@ -189,6 +174,49 @@ def flagBinary(flag) :
         for t in range(add):
             flagB.insert(0,'0') # We insert 0 to complete until the maximal flag size.
     return flagB
+
+#compter le nombre de reads en fonction du flag (colonne #2) -> look at bit x4 of flag binary
+def readMapped(reads_info):
+    mapped_count = 0
+    unmapped_count = 0
+    read_count = 0
+    for chromosome in reads_info:
+        for read in reads_info[chromosome]:
+            flag = read[1]
+            flagB = flagBinary(flag)
+            read_count += 1
+            if int(flagB[-3]) == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
+                mapped_count += 1
+            else:
+                unmapped_count += 1
+    print(mapped_count, unmapped_count, read_count)
+    return mapped_count, unmapped_count, read_count
+
+#### 2) Comment les reads (et paires de reads) sont-ils mappés ?  # compter le nombre de reads pour chaque flag ####
+
+#function to extract and count flags in a dictionary
+def readFlag(reads_info):
+    dico_flag = {}
+    for chromosome in reads_info:
+        for read in reads_info[chromosome]:
+            if read[1] in dico_flag:
+                dico_flag[read[1]] += 1
+            else:
+                dico_flag[read[1]] = dico_flag.get(read[1],0) + 1
+    print(dico_flag)
+    return dico_flag
+
+#### 3) Où les reads sont-ils mappés ? L'alignement est-il homogène le long de la séquence de référence ? # compter le nombre de reads par chromosome ####
+
+def readCHROM(reads_info):
+    dico_chrom = {key: 0 for key in reads_info.keys()} #create a counting dico with same keys as reads_info 
+    for chromosome in reads_info:
+        for read in reads_info[chromosome]:
+            flagB = flagBinary(read[1])
+            if int(flagB[-3]) == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
+                dico_chrom[chromosome] += 1
+    print(dico_chrom)
+    return dico_chrom
 
 
 #### Analyze the unmapped reads (not paired) ####
@@ -318,7 +346,9 @@ def main():
     if check(input_file):
         print("Format check OK")
         reads_info = sam_reader(input_file)
-        print(readMapped(reads_info))
+        readMapped(reads_info)
+        readFlag(reads_info)
+        readCHROM(reads_info)
             
             
 
