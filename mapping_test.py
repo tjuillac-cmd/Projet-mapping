@@ -241,19 +241,23 @@ def readCHROM(reads_extract):
 def positionsReads(reads_extract):
     positions = {}
     for chromosome in reads_extract:
-        for read in reads_extract[chromosome]:
+        
+        if not chromosome == "*": #skip unmapped reads
             
-            #calculate the position of the read on the reference
-            pos, end = read[2], 0        
-            cigar = read[4]
-            length = lengthRefCigar(cigar)
-            end = pos + length - 1
+            for read in reads_extract[chromosome]:
+                
+                #calculate the position of the read on the reference
+                pos, end = read[2], 0        
+                cigar = read[4]
+                length = lengthRefCigar(cigar)
+                end = pos + length - 1
 
-            if chromosome not in positions:
-                positions[chromosome] = []
-                positions[chromosome].append((pos, end))
-            else:
-                positions[chromosome].append((pos, end))
+                if chromosome not in positions:
+                    positions[chromosome] = []
+                    positions[chromosome].append((pos, end))
+                else:
+                    positions[chromosome].append((pos, end))
+
     print(positions)
     return positions
 
@@ -341,6 +345,8 @@ def main():
         count_flag = readFlag(reads_extract)
         count_chrom = readCHROM(reads_extract)
         count_mapq = readMAPQ(reads_extract,36)
+
+        positionsReads(reads_extract)
 
         Summary("summary.txt", count_flag, count_chrom, count_mapped, count_mapq)
 
