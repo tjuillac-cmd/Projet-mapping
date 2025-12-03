@@ -177,20 +177,18 @@ def flagBinary(flag) :
 
 #compter le nombre de reads en fonction du flag (colonne #2) -> look at bit x4 of flag binary
 def readMapped(reads_info):
-    mapped_count = 0
-    unmapped_count = 0
-    read_count = 0
+    info_mapped = {'mapped': 0, 'unmapped': 0, 'total': 0}
     for chromosome in reads_info:
         for read in reads_info[chromosome]:
             flag = read[1]
             flagB = flagBinary(flag)
-            read_count += 1
+            info_mapped['total'] += 1
             if int(flagB[-3]) == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
-                mapped_count += 1
+                info_mapped['mapped'] += 1
             else:
-                unmapped_count += 1
-    print(mapped_count, unmapped_count, read_count)
-    return mapped_count, unmapped_count, read_count
+                info_mapped['unmapped'] += 1
+    print(info_mapped)
+    return info_mapped
 
 #### 2) Comment les reads (et paires de reads) sont-ils mappés ?  # compter le nombre de reads pour chaque flag ####
 
@@ -209,17 +207,16 @@ def readFlag(reads_info):
 #### 3) Où les reads sont-ils mappés ? L'alignement est-il homogène le long de la séquence de référence ? # compter le nombre de reads par chromosome ####
 
 def readCHROM(reads_info):
-    dico_chrom_mapped = {key: 0 for key in reads_info.keys()} #create a counting dico with same keys as reads_info 
-    dico_chrom_unmapped = {key: 0 for key in reads_info.keys()}
+    dico_chrom= {key: [0, 0] for key in reads_info.keys()} #create a counting dico with same keys as reads_info 
     for chromosome in reads_info:
         for read in reads_info[chromosome]:
             flagB = flagBinary(read[1])
             if int(flagB[-3]) == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
-                dico_chrom_mapped[chromosome] += 1
+                dico_chrom[chromosome][0] += 1 #dico_chrom[chromosome][0] is the number of mapped reads
             else:
-                dico_chrom_unmapped[chromosome] +=1
-    print(dico_chrom_mapped, dico_chrom_unmapped)
-    return dico_chrom_mapped, dico_chrom_unmapped
+                dico_chrom[chromosome][1] +=1 #dico_chrom[chromosome][1] is the number of unmapped reads
+    print(dico_chrom)
+    return dico_chrom
 
 #### 4) Avec quelle qualité les reads sont-ils mappés ? # compter le nombre de reads pour chaque valeur de qualité ou par tranche de valeurs (score de mapping) ####
 
@@ -240,16 +237,36 @@ def readMAPQ(reads_info,threshold):
  
 #### Summarise the results ####
 
-def Summary(fileName, dico_flag):
+def Summary(fileName, dico_flag, dico_chrom, info_mapped, read_mapq):
     '''create a text file to summarize the results'''
     with open(fileName, "w") as fileSummary: #open file in write mode
         fileSummary.write("============ Summary of SAM file ============\n\n")
+
+        #1) output mapped reads, unmapped reads and total reads
+        fileSummary.write("Reads mapping information:\n")
+        for key, value in info_mapped.items():
+            fileSummary.write(f"{key} reads: {value}\n") #write mapped, unmapped and total reads
+        fileSummary.write("\n=============================================\n")
+
+        #2) output reads per flag
         fileSummary.write("Reads per flag:\n")
         for flag, count in dico_flag.items():
             fileSummary.write(f"{flag} : {count} reads\n") #write each flag and its count
         fileSummary.write("\n=============================================\n")
-        print(f"Summary written in {fileName}")
+        
+        #3) output reads per chromosome
+        fileSummary.write("Reads per chromosome:\n")
+        for chrom, counts in dico_chrom.items():
+            fileSummary.write(f"{chrom} : {counts[0]} mapped reads, {counts[1]} unmapped reads\n") #write each chromosome and its mapped/unmapped counts
+        fileSummary.write("\n=============================================\n")
 
+        #4) output reads per MAPQ
+        fileSummary.write("Summary of reads repartition per mapping quality:\n")
+        for key, value in read_mapq.items():
+            fileSummary.write(f"{key} : {value} reads\n") #write MAPQ summary
+        fileSummary.write("\n=============================================\n")
+
+        print(f"Summary written in {fileName}")
 
 #### Main function ####
 
@@ -261,13 +278,17 @@ def main():
     input_file = sys.argv[1]
     if check(input_file):
         print("Format check OK")
+
         reads_info = sam_reader(input_file)
-        readMapped(reads_info)
-        readFlag(reads_info)
-        readCHROM(reads_info)
-        readMAPQ(reads_info,36)
+
+        info_mapped = readMapped(reads_info)
         dico_flag = readFlag(reads_info)
-        Summary("summary.txt", dico_flag)
+        dico_chrom = readCHROM(reads_info)
+        read_mapq = readMAPQ(reads_info,36)
+
+        Summary("summary.txt", dico_flag, dico_chrom, info_mapped, read_mapq)
+
+        os.system("cat summary.txt")
             
             
 
