@@ -133,21 +133,16 @@ def check(input_file):
 
 ## 2/ Read, and 3/ Store,
 
-def sam_reader(input_file):
+def sam_reader(input_file, header_parsed):
     '''extract useful information and store it in a dictionary'''
-    reads_extract = {}
-    chromosome_extract = {}
+    reads_extract = {chrom: [] for chrom in header_parsed.keys()}
 
     with open(input_file, "r") as file:
         for line in file:
-            if line.startswith("@"): #extract name and length of chromosomes from header, add names as keys and lengths as values
-                if line.startswith("@SQ"):
-                    sn_ln = parse_header(line)
-                    chromosome_extract[sn_ln[0]] = sn_ln[1]
-                    reads_extract[sn_ln[0]] = []
+            if line.startswith("@"): #skip header lines
                 continue
             columns = line.strip().split("\t")
-            
+                
             #extract useful fields
             qname = columns[0]
             flag = int(columns[1])
@@ -164,18 +159,24 @@ def sam_reader(input_file):
 
             reads_extract[chromosome].append((qname, flag, pos, mapq, cigar))
 
-        return reads_extract, chromosome_extract
+    return reads_extract
 
 ### Fuction to parse header lines to get the name and length of chromosomes from header lines ###
-def parse_header(header_line):
-    columns = header_line.strip().split("\t")
-    sn_ln = [None, 0]
-    for field in columns:
-        if field.startswith("SN:"):
-            sn_ln[0] = field.split(":")[1]
-        elif field.startswith("LN:"):
-            sn_ln[1] = int(field.split(":")[1])
-    return sn_ln
+def parse_header(input_file):
+    length_ref = {}
+    with open(input_file, "r") as file:
+        for line in file:
+            if not line.startswith("@"):
+                break
+            if line.startswith("@SQ"):
+                columns = line.strip().split("\t")
+                for field in columns:
+                    if field.startswith("SN:"):
+                        sn = field.split(":")[1]
+                    elif field.startswith("LN:"):
+                        ln = int(field.split(":")[1])
+                length_ref[sn] = ln
+    return length_ref
 
 ## 4/ Analyse 
 
@@ -239,29 +240,44 @@ def readCHROM(reads_extract):
 # on cherche la position de chaque read sur le chromosome en utilisant la position de départ (POS) et la longueur du CIGAR
 
 def positionsReads(reads_extract):
+    '''calculate the positions of each mapped read on the reference sequence for each chromosome {[(start1, end1),(start2, end2)...]}'''
     positions = {}
     for chromosome in reads_extract:
         
-        if not chromosome == "*": #skip unmapped reads
+        if not chromosome == "*": #skip chromosome '*'
             
             for read in reads_extract[chromosome]:
                 
-                #calculate the position of the read on the reference
-                pos, end = read[2], 0        
-                cigar = read[4]
-                length = lengthRefCigar(cigar)
-                end = pos + length - 1
+                flagB = flagBinary(read[1])
 
-                if chromosome not in positions:
-                    positions[chromosome] = []
-                    positions[chromosome].append((pos, end))
-                else:
-                    positions[chromosome].append((pos, end))
+                if int(flagB[-3]) == 0: # only mapped reads
+
+                    #calculate the position of the read on the reference
+                    start, end = read[2], 0        
+                    cigar = read[4]
+                    length = lengthRefCigar(cigar)
+                    end = start + length - 1
+
+                    if chromosome not in positions:
+                        positions[chromosome] = []
+                        positions[chromosome].append((start, end))
+                    else:
+                        positions[chromosome].append((start, end))
 
     print(positions)
     return positions
 
-            
+def readsPerWindow(positions, header_parsed, window_size):
+    '''calculate the niumber oof reads per window on each reference'''
+    
+    for chrom, reads in positions.items():
+        if not reads: #case chromosome has no reads
+            continue
+        length_ref = header_parsed[chrom]
+
+
+ #maintenant il faut utiliser le LN des chromosomes pour voir si les reads sont homogènement répartis le long de la séquence de référence
+ # on peut éventuellement faire un graphe pour visualiser           
 
 
 
@@ -339,8 +355,9 @@ def main():
     input_file = sys.argv[1]
     if check(input_file):
         print("Format check OK")
-
-        reads_extract = sam_reader(input_file)[0]
+        
+        header_parsed = parse_header(input_file)
+        reads_extract = sam_reader(input_file, header_parsed)
         count_mapped = readMapped(reads_extract)
         count_flag = readFlag(reads_extract)
         count_chrom = readCHROM(reads_extract)
