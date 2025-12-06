@@ -255,7 +255,7 @@ def readFlag(reads_extract_raw):
 
 def readCHROM(reads_extract_raw):
     '''count the number of mapped and unmapped reads per chromosome {chromosome: [mapped, unmapped]}'''
-    count_chrom= {key: [0, 0] for key in reads_extract.keys()} #create a counting dico with same keys as reads_extract 
+    count_chrom= {key: [0, 0] for key in reads_extract_raw.keys()} #create a counting dico with same keys as reads_extract 
     for chromosome in reads_extract_raw:
         for read in reads_extract_raw[chromosome]:
             if read[1] & 4 == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
