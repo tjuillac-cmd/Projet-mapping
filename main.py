@@ -532,7 +532,7 @@ def main():
     mapq_window = meanMAPQPerWindow(positions, header_parsed, window_size)
     plotReadsPerWindow(reads_window, mapq_window, window_size)
 
-    ## Analysis of raw data wtihout filtering ##
+    ## Statistics of raw data wtihout filtering ##
     reads_extract_raw = sam_reader(input_file, header_parsed, None, False) #reads without any filtering for total counts
     count_mapped = readMapped(reads_extract_raw)
     count_flag = readFlag(reads_extract_raw)
