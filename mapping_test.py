@@ -2,9 +2,44 @@
 
 import sys,os,re, matplotlib.pyplot as plt, matplotlib.cm as cm, matplotlib.colors as colors
 
-############### FUNCTIONS TO : ###############
+############### TOOL FUNCTIONS ###############
 
-## 1/ Check, 
+def isFullyMapped(flag, cigar):
+    '''determine if a read is mapped based on flag and cigar'''
+    
+    #case unmapped
+    if flag & 4 == 1: #unmapped
+        return False
+    
+    if cigar == "*" or cigar == None: #unmapped
+        return False 
+    
+    ops = re.findall(r"[MIDNSHPX=]", cigar)
+
+    #case partially mapped
+    if "S" in ops or "H" in ops:
+        return False    
+    
+    #case mapped
+    if all(op in ["M", "D", "N", "X", "="] for op in ops):
+        return True
+
+
+def lengthRefCigar(cigar): 
+    '''calculate the length consumed on the reference sequence based on the CIGAR string'''
+   
+    ext = re.findall(r"(\d+)([MIDNSHPX=])",cigar) # split cigar on alpha numeric and numeric, ex. ext = ['1','0','0','M','5','S']
+    length = 0
+
+    for nb, op in ext: # for each pair number-operation
+
+        if op in ("M", "D", "N", "X", "="): # these operations consume reference
+            length += int(nb)
+
+    return length
+
+
+############### SAM FILE CHECK FUNCTION ###############
 
 def check(input_file):
     '''
@@ -131,7 +166,8 @@ def check(input_file):
                 sys.exit(1)     
     return True
 
-## 2/ Read, and 3/ Store,
+
+############### READ FILTERING AND EXTRACTION FUNCTIONS ###############
 
 def sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly):
     '''extract useful information and store it in a dictionary'''
@@ -152,7 +188,6 @@ def sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly):
 
             #extract chromosome from RNAME
             chromosome = columns[2]
-            flagB = flagBinary(flag)
 
             if fullyMappedOnly:
                 #filter fully mapped reads only
@@ -169,29 +204,9 @@ def sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly):
 
     return reads_extract
 
-def isFullyMapped(flag, cigar):
-    '''determine if a read is mapped based on flag and cigar'''
-    flagB = flagBinary(flag)
-    
-    #case unmapped
-    if int(flagB[-3]) == 1: #unmapped
-        return False
-    
-    if cigar == "*" or cigar == None: #unmapped
-        return False 
-    
-    ops = re.findall(r"[MIDNSHPX=]", cigar)
 
-    #case partially mapped
-    if "S" in ops or "H" in ops:
-        return False    
-    
-    #case mapped
-    if all(op in ["M", "D", "N", "X", "="] for op in ops):
-        return True
-
-### Fuction to parse header lines to get the name and length of chromosomes from header lines ###
 def parse_header(input_file):
+    '''parse the header of the SAM file to get the length of each reference sequence {reference_name: length}'''
     length_ref = {}
     with open(input_file, "r") as file:
         for line in file:
@@ -207,44 +222,29 @@ def parse_header(input_file):
                 length_ref[sn] = ln
     return length_ref
 
-## 4/ Analyse 
 
-#### 1) Combien de reads sont mappés ? ####
+################ RAW DATA STATISTICS FUNCTIONS ###############
 
-#Convert the flag into binary
-def flagBinary(flag) :
-
-    flagB = bin(int(flag)) # Transform the integer into a binary.
-    flagB = flagB[2:] # Remove '0b' Example: '0b1001101' > '1001101'
-    flagB = list(flagB) 
-    if len(flagB) < 12: # Size adjustement to 12 (maximal flag size)
-        add = 12 - len(flagB) # We compute the difference between the maximal flag size (12) and the length of the binary flag.
-        for t in range(add):
-            flagB.insert(0,'0') # We insert 0 to complete until the maximal flag size.
-    return flagB
-
-#compter le nombre de reads en fonction du flag (colonne #2) -> look at bit x4 of flag binary
-def readMapped(reads_extract):
+def readMapped(reads_extract_raw):
+    '''count the number of mapped, unmapped and total reads {'mapped': x, 'unmapped': y, 'total': z}'''
     count_mapped = {'mapped': 0, 'unmapped': 0, 'total': 0}
-    for chromosome in reads_extract:
-        for read in reads_extract[chromosome]:
+    for chromosome in reads_extract_raw:
+        for read in reads_extract_raw[chromosome]:
             flag = read[1]
-            flagB = flagBinary(flag)
             count_mapped['total'] += 1
-            if int(flagB[-3]) == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
+            if flag & 4 == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
                 count_mapped['mapped'] += 1
             else:
                 count_mapped['unmapped'] += 1
     print(count_mapped)
     return count_mapped
 
-#### 2) Comment les reads (et paires de reads) sont-ils mappés ?  # compter le nombre de reads pour chaque flag ####
 
-#function to extract and count flags in a dictionary
-def readFlag(reads_extract):
+def readFlag(reads_extract_raw):
+    '''count the number of reads per flag {flag: count}'''
     count_flag = {}
-    for chromosome in reads_extract:
-        for read in reads_extract[chromosome]:
+    for chromosome in reads_extract_raw:
+        for read in reads_extract_raw[chromosome]:
             if read[1] in count_flag:
                 count_flag[read[1]] += 1
             else:
@@ -252,21 +252,68 @@ def readFlag(reads_extract):
     print(count_flag)
     return count_flag
 
-#### 3) Où les reads sont-ils mappés ? L'alignement est-il homogène le long de la séquence de référence ? # compter le nombre de reads par chromosome ####
 
-def readCHROM(reads_extract):
+def readCHROM(reads_extract_raw):
+    '''count the number of mapped and unmapped reads per chromosome {chromosome: [mapped, unmapped]}'''
     count_chrom= {key: [0, 0] for key in reads_extract.keys()} #create a counting dico with same keys as reads_extract 
-    for chromosome in reads_extract:
-        for read in reads_extract[chromosome]:
-            flagB = flagBinary(read[1])
-            if int(flagB[-3]) == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
+    for chromosome in reads_extract_raw:
+        for read in reads_extract_raw[chromosome]:
+            if read[1] & 4 == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
                 count_chrom[chromosome][0] += 1 #count_chrom[chromosome][0] is the number of mapped reads
             else:
                 count_chrom[chromosome][1] +=1 #count_chrom[chromosome][1] is the number of unmapped reads
     print(count_chrom)
     return count_chrom
 
-# on cherche la position de chaque read sur le chromosome en utilisant la position de départ (POS) et la longueur du CIGAR
+
+def readMAPQ(reads_extract_raw,threshold):
+    '''count the number of reads per MAPQ {MAPQ above threshold, MAPQ below threshold}'''
+    above = f"MAPQ above {threshold}"
+    below = f"MAPQ below {threshold}"
+    count_mapq = {above : 0, below : 0}
+    for chromosome in reads_extract_raw:
+        for read in reads_extract_raw[chromosome]:
+            if read[3] >= threshold :
+                count_mapq[above] += 1
+            else:
+                count_mapq[below] += 1
+    print(count_mapq)
+    return count_mapq
+
+
+def Summary(fileName, count_flag, count_chrom, count_mapped, count_mapq):
+    '''create a text file to summarize the results'''
+    with open(fileName, "w") as fileSummary: #open file in write mode
+        fileSummary.write("============ Summary of SAM file ============\n\n")
+
+        #1) output mapped reads, unmapped reads and total reads
+        fileSummary.write("Reads mapping information:\n")
+        for key, value in count_mapped.items():
+            fileSummary.write(f"{key} reads: {value}\n") #write mapped, unmapped and total reads
+        fileSummary.write("\n=============================================\n")
+
+        #2) output reads per flag
+        fileSummary.write("Reads per flag:\n")
+        for flag, count in count_flag.items():
+            fileSummary.write(f"{flag} : {count} reads\n") #write each flag and its count
+        fileSummary.write("\n=============================================\n")
+        
+        #3) output reads per chromosome
+        fileSummary.write("Reads per chromosome:\n")
+        for chrom, counts in count_chrom.items():
+            fileSummary.write(f"{chrom} : {counts[0]} mapped reads, {counts[1]} unmapped reads\n") #write each chromosome and its mapped/unmapped counts
+        fileSummary.write("\n=============================================\n")
+
+        #4) output reads per MAPQ
+        fileSummary.write("Summary of reads repartition per mapping quality:\n")
+        for key, value in count_mapq.items():
+            fileSummary.write(f"{key} : {value} reads\n") #write MAPQ summary
+        fileSummary.write("\n=============================================\n")
+
+        print(f"Summary written in {fileName}")
+
+
+################ STATISTICS ON FILTERED DATA ###############
 
 def positionsReads(reads_extract):
     '''calculate the positions of each mapped read on the reference sequence for each chromosome {[(start1, end1),(start2, end2)...]} and MAPQ'''
@@ -277,9 +324,7 @@ def positionsReads(reads_extract):
             
             for read in reads_extract[chromosome]:
                 
-                flagB = flagBinary(read[1])
-
-                if int(flagB[-3]) == 0: # only mapped reads
+                if read[1] & 4 == 0: # only mapped reads
 
                     mapq = read[3]
 
@@ -296,6 +341,7 @@ def positionsReads(reads_extract):
                         positions[chromosome].append((start, end, mapq))
 
     return positions
+
 
 def readsPerWindow(positions, header_parsed, window_size):
     '''calculate the niumber of reads per window on each reference'''
@@ -331,6 +377,7 @@ def readsPerWindow(positions, header_parsed, window_size):
     
     print(reads_window)
     return reads_window
+
 
 def meanMAPQPerWindow(positions, header_parsed, window_size):
     '''calculate the mean MAPQ per window on each reference'''
@@ -372,6 +419,9 @@ def meanMAPQPerWindow(positions, header_parsed, window_size):
     
     print(mapq_window)
     return mapq_window
+
+
+################ PLOTTING FUNCTION ###############
 
 def plotReadsPerWindow(reads_window, mapq_window, window_size):
     '''plot the number of reads per window on each chromosome, colored by mean MAPQ'''
@@ -417,71 +467,7 @@ def plotReadsPerWindow(reads_window, mapq_window, window_size):
         plt.show()
  
 
-### Analyse the CIGAR = calculate length consumed on reference ###
-def lengthRefCigar(cigar): 
-   
-    ext = re.findall(r"(\d+)([MIDNSHPX=])",cigar) # split cigar on alpha numeric and numeric, ex. ext = ['1','0','0','M','5','S']
-    length = 0
-
-    for nb, op in ext: # for each pair number-operation
-
-        if op in ("M", "D", "N", "X", "="): # these operations consume reference
-            length += int(nb)
-
-    return length
-
-
-#### 4) Avec quelle qualité les reads sont-ils mappés ? # compter le nombre de reads pour chaque valeur de qualité ou par tranche de valeurs (score de mapping) ####
-
-def readMAPQ(reads_extract,threshold):
-    above = f"MAPQ above {threshold}"
-    below = f"MAPQ below {threshold}"
-    count_mapq = {above : 0, below : 0}
-    for chromosome in reads_extract:
-        for read in reads_extract[chromosome]:
-            if read[3] >= threshold :
-                count_mapq[above] += 1
-            else:
-                count_mapq[below] += 1
-    print(count_mapq)
-    return count_mapq
-
-
- 
-#### Summarise the results ####
-
-def Summary(fileName, count_flag, count_chrom, count_mapped, count_mapq):
-    '''create a text file to summarize the results'''
-    with open(fileName, "w") as fileSummary: #open file in write mode
-        fileSummary.write("============ Summary of SAM file ============\n\n")
-
-        #1) output mapped reads, unmapped reads and total reads
-        fileSummary.write("Reads mapping information:\n")
-        for key, value in count_mapped.items():
-            fileSummary.write(f"{key} reads: {value}\n") #write mapped, unmapped and total reads
-        fileSummary.write("\n=============================================\n")
-
-        #2) output reads per flag
-        fileSummary.write("Reads per flag:\n")
-        for flag, count in count_flag.items():
-            fileSummary.write(f"{flag} : {count} reads\n") #write each flag and its count
-        fileSummary.write("\n=============================================\n")
-        
-        #3) output reads per chromosome
-        fileSummary.write("Reads per chromosome:\n")
-        for chrom, counts in count_chrom.items():
-            fileSummary.write(f"{chrom} : {counts[0]} mapped reads, {counts[1]} unmapped reads\n") #write each chromosome and its mapped/unmapped counts
-        fileSummary.write("\n=============================================\n")
-
-        #4) output reads per MAPQ
-        fileSummary.write("Summary of reads repartition per mapping quality:\n")
-        for key, value in count_mapq.items():
-            fileSummary.write(f"{key} : {value} reads\n") #write MAPQ summary
-        fileSummary.write("\n=============================================\n")
-
-        print(f"Summary written in {fileName}")
-
-#### Main function ####
+################ MAIN FUNCTION ###############
 
 def main():
     if len(sys.argv) < 2:
@@ -491,12 +477,7 @@ def main():
     input_file = sys.argv[1]
     
     ## Check input file ##
-
-    if not check(input_file):
-        print("Error: input file is not a valid SAM file.")
-        sys.exit(1)
-
-    print("Format check OK")
+    check(input_file)
 
     ## User inputs ##
 
