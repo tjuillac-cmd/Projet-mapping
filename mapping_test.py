@@ -17,7 +17,7 @@ def check(input_file):
     if not input_file.endswith(".sam"): #check extension
         print("File must be in .sam format")
         sys.exit(1)
-    print("Exists and format check OK")
+    print("File exists and format check OK")
 
     with open(input_file, "r") as file: #open file in read mode
         for line_index, line in enumerate(file,start=1):
@@ -133,7 +133,7 @@ def check(input_file):
 
 ## 2/ Read, and 3/ Store,
 
-def sam_reader(input_file, header_parsed):
+def sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly):
     '''extract useful information and store it in a dictionary'''
     reads_extract = {chrom: [] for chrom in header_parsed.keys()}
 
@@ -152,14 +152,46 @@ def sam_reader(input_file, header_parsed):
 
             #extract chromosome from RNAME
             chromosome = columns[2]
+            flagB = flagBinary(flag)
 
-            #verify if chromosome key exists in dictionary, if not create it in case not described in @SQ
+            if flagB[-3] == '1':  # unmapped read
+                continue
+
+            if fullyMappedOnly:
+                #filter fully mapped reads only
+                if not isFullyMapped(flag, cigar):
+                    continue
+            
+            if filterMAPQ is not None and mapq < filterMAPQ:
+                continue
+
             if chromosome not in reads_extract:
-                reads_extract[chromosome] = []
+                reads_extract[chromosome] = []            
 
             reads_extract[chromosome].append((qname, flag, pos, mapq, cigar))
 
     return reads_extract
+
+def isFullyMapped(flag, cigar):
+    '''determine if a read is mapped based on flag and cigar'''
+    flagB = flagBinary(flag)
+    
+    #case unmapped
+    if int(flagB[-3]) == 1: #unmapped
+        return False
+    
+    if cigar == "*" or cigar == None: #unmapped
+        return False 
+    
+    ops = re.findall(r"[MIDNSHPX=]", cigar)
+
+    #case partially mapped
+    if "S" in ops or "H" in ops:
+        return False    
+    
+    #case mapped
+    if all(op in ["M", "D", "N", "X", "="] for op in ops):
+        return True
 
 ### Fuction to parse header lines to get the name and length of chromosomes from header lines ###
 def parse_header(input_file):
@@ -394,17 +426,21 @@ def main():
     input_file = sys.argv[1]
     if check(input_file):
         print("Format check OK")
-        
+
+        filterMAPQ = int(input("Enter a MAPQ threshold to filter reads (or press Enter to skip): ") or "0")
+        fullyMappedOnly = input("Do you want to consider only fully mapped reads? (True/False): ")
+        window_size = int(input("Enter window size for read distribution (default 1000): ") or 1000)
+
         header_parsed = parse_header(input_file)
-        reads_extract = sam_reader(input_file, header_parsed)
+        reads_extract = sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly)
         count_mapped = readMapped(reads_extract)
         count_flag = readFlag(reads_extract)
         count_chrom = readCHROM(reads_extract)
-        count_mapq = readMAPQ(reads_extract,36)
+        count_mapq = readMAPQ(reads_extract,filterMAPQ)
 
         positions = positionsReads(reads_extract)
-        reads_window = readsPerWindow(positions, header_parsed, window_size=1000)
-        plotReadsPerWindow(reads_window, window_size=1000)
+        reads_window = readsPerWindow(positions, header_parsed, window_size)
+        plotReadsPerWindow(reads_window, window_size)
 
         Summary("summary.txt", count_flag, count_chrom, count_mapped, count_mapq)
 
