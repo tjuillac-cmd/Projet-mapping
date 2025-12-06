@@ -1,6 +1,6 @@
 ############### IMPORT MODULES ###############
 
-import sys,os,re
+import sys,os,re, matplotlib.pyplot as plt
 
 ############### FUNCTIONS TO : ###############
 
@@ -264,22 +264,61 @@ def positionsReads(reads_extract):
                     else:
                         positions[chromosome].append((start, end))
 
-    print(positions)
     return positions
 
 def readsPerWindow(positions, header_parsed, window_size):
-    '''calculate the niumber oof reads per window on each reference'''
-    
+    '''calculate the niumber of reads per window on each reference'''
+    reads_window = {chrom: [] for chrom in positions.keys()}
+
     for chrom, reads in positions.items():
+
         if not reads: #case chromosome has no reads
             continue
+        
         length_ref = header_parsed[chrom]
+        nb_windows = (length_ref // window_size) + 1 # calculate the number of windows needed to cover the reference
+        windows_counts = [0.0] * nb_windows # initialize a list to count reads per window
 
+        # for each read we determine the range of windows it is on
+        for start, end in reads:
+            first_window = start // window_size
+            last_window = end // window_size
+            for window in range(first_window, last_window + 1):
+                '''we add to each window's count 1 if fully covered or coverage ratio if not entirely covered (for first and last)'''
+                if window == first_window:
+                    overlap = (first_window + 1) * window_size - start                    
+                    windows_counts[window] += overlap / window_size
+                elif window == last_window:
+                    overlap = end - last_window * window_size                    
+                    windows_counts[window] += overlap / window_size
+                else:    
+                    windows_counts[window] += 1.0
+        
+        #we round up and we add to the dictionnary of repartition per chromosome
+        windows_counts = [round(c, 3) for c in windows_counts]
+        reads_window[chrom] = windows_counts
+    
+    print(reads_window)
+    return reads_window
 
- #maintenant il faut utiliser le LN des chromosomes pour voir si les reads sont homogènement répartis le long de la séquence de référence
- # on peut éventuellement faire un graphe pour visualiser           
+def plotReadsPerWindow(reads_window, window_size):
+    '''plot the number of reads per window on each chromosome'''
 
+    for chrom, counts in reads_window.items():
+        if not counts: #case chromosome has no reads
+            continue
 
+        plt.figure(figsize=(10, 5))
+        plt.bar(range(len(counts)), counts, width=1.0, edgecolor='black')
+        plt.xlabel(f'Windows of size {window_size} bp along {chrom}')
+        plt.ylabel('Number of reads')
+        plt.title(f'Read distribution along {chrom}')
+        plt.xticks(ticks=range(0, len(counts), max(1, len(counts)//10)), 
+                   labels=[str(i * window_size) for i in range(0, len(counts), max(1, len(counts)//10))])
+        plt.grid(axis='y')
+        plt.tight_layout()
+        plt.show()
+ 
 
 ### Analyse the CIGAR = calculate length consumed on reference ###
 def lengthRefCigar(cigar): 
@@ -363,7 +402,9 @@ def main():
         count_chrom = readCHROM(reads_extract)
         count_mapq = readMAPQ(reads_extract,36)
 
-        positionsReads(reads_extract)
+        positions = positionsReads(reads_extract)
+        reads_window = readsPerWindow(positions, header_parsed, window_size=1000)
+        plotReadsPerWindow(reads_window, window_size=1000)
 
         Summary("summary.txt", count_flag, count_chrom, count_mapped, count_mapq)
 
