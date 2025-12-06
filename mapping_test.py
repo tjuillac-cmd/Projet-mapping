@@ -154,9 +154,6 @@ def sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly):
             chromosome = columns[2]
             flagB = flagBinary(flag)
 
-            if flagB[-3] == '1':  # unmapped read
-                continue
-
             if fullyMappedOnly:
                 #filter fully mapped reads only
                 if not isFullyMapped(flag, cigar):
@@ -399,19 +396,20 @@ def plotReadsPerWindow(reads_window, mapq_window, window_size):
         colors_mapped = [colormap(norm) for norm in norm_mapq]
 
         # plot
-        plt.figure(figsize=(10, 5))
-        plt.bar(range(len(counts)), counts, width=1.0, color = colors_mapped, edgecolor='none') #bar plot with colored bars red to green
-        plt.xlabel(f'Windows of size {window_size} bp along {chrom}')
-        plt.ylabel('Number of reads')
-        plt.title(f'Read distribution along {chrom} (colored by mean MAPQ)')
-        plt.xticks(ticks=range(0, len(counts), max(1, len(counts)//10)), 
+        fig, ax = plt.subplots(figsize=(10, 5)) 
+
+        ax.bar(range(len(counts)), counts, width=1.0, color = colors_mapped, edgecolor='none') #bar plot with colored bars red to green
+        ax.set_xlabel(f'Windows of size {window_size} bp along {chrom}')
+        ax.set_ylabel('Number of reads')
+        ax.set_title(f'Read distribution along {chrom} (colored by mean MAPQ)')
+        ax.set_xticks(ticks=range(0, len(counts), max(1, len(counts)//10)), 
                    labels=[str(i * window_size) for i in range(0, len(counts), max(1, len(counts)//10))])
         
         #colorbar pour MAPQ
         norm = colors.Normalize(vmin=min_mapq, vmax=max_mapq)
         sm = cm.ScalarMappable(cmap=colormap, norm=norm)
         sm.set_array([])
-        cbar = plt.colorbar(sm)
+        cbar = fig.colorbar(sm, ax = ax)
         cbar.set_label('Mean MAPQ per window')
         
         plt.grid(axis='y')
@@ -539,22 +537,26 @@ def main():
 
     ## Function on SAM file ##
     header_parsed = parse_header(input_file)
-    reads_extract = sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly)
-    count_mapped = readMapped(reads_extract)
-    count_flag = readFlag(reads_extract)
-    count_chrom = readCHROM(reads_extract)
+    
+    ## Analysis of filtered data ##
+    reads_extract = sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly) #reads with user filtering
 
     if filterMAPQ is None:
         MAPQ_threshold = 36 #default threshold
     else:
         MAPQ_threshold = filterMAPQ
 
-    count_mapq = readMAPQ(reads_extract,MAPQ_threshold)
-
     positions = positionsReads(reads_extract)
     reads_window = readsPerWindow(positions, header_parsed, window_size)
     mapq_window = meanMAPQPerWindow(positions, header_parsed, window_size)
     plotReadsPerWindow(reads_window, mapq_window, window_size)
+
+    ## Analysis of raw data wtihout filtering ##
+    reads_extract_raw = sam_reader(input_file, header_parsed, None, False) #reads without any filtering for total counts
+    count_mapped = readMapped(reads_extract_raw)
+    count_flag = readFlag(reads_extract_raw)
+    count_chrom = readCHROM(reads_extract_raw)
+    count_mapq = readMAPQ(reads_extract_raw, MAPQ_threshold)
 
     Summary("summary.txt", count_flag, count_chrom, count_mapped, count_mapq)
 
