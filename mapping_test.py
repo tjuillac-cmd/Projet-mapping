@@ -1,6 +1,6 @@
 ############### IMPORT MODULES ###############
 
-import sys,os,re, matplotlib.pyplot as plt
+import sys,os,re, matplotlib.pyplot as plt, matplotlib.cm as cm, matplotlib.colors as colors
 
 ############### FUNCTIONS TO : ###############
 
@@ -272,7 +272,7 @@ def readCHROM(reads_extract):
 # on cherche la position de chaque read sur le chromosome en utilisant la position de départ (POS) et la longueur du CIGAR
 
 def positionsReads(reads_extract):
-    '''calculate the positions of each mapped read on the reference sequence for each chromosome {[(start1, end1),(start2, end2)...]}'''
+    '''calculate the positions of each mapped read on the reference sequence for each chromosome {[(start1, end1),(start2, end2)...]} and MAPQ'''
     positions = {}
     for chromosome in reads_extract:
         
@@ -284,6 +284,8 @@ def positionsReads(reads_extract):
 
                 if int(flagB[-3]) == 0: # only mapped reads
 
+                    mapq = read[3]
+
                     #calculate the position of the read on the reference
                     start, end = read[2], 0        
                     cigar = read[4]
@@ -292,9 +294,9 @@ def positionsReads(reads_extract):
 
                     if chromosome not in positions:
                         positions[chromosome] = []
-                        positions[chromosome].append((start, end))
+                        positions[chromosome].append((start, end, mapq))
                     else:
-                        positions[chromosome].append((start, end))
+                        positions[chromosome].append((start, end, mapq))
 
     return positions
 
@@ -312,7 +314,7 @@ def readsPerWindow(positions, header_parsed, window_size):
         windows_counts = [0.0] * nb_windows # initialize a list to count reads per window
 
         # for each read we determine the range of windows it is on
-        for start, end in reads:
+        for start, end, mapq in reads:
             first_window = start // window_size
             last_window = end // window_size
             for window in range(first_window, last_window + 1):
@@ -333,20 +335,85 @@ def readsPerWindow(positions, header_parsed, window_size):
     print(reads_window)
     return reads_window
 
-def plotReadsPerWindow(reads_window, window_size):
-    '''plot the number of reads per window on each chromosome'''
+def meanMAPQPerWindow(positions, header_parsed, window_size):
+    '''calculate the mean MAPQ per window on each reference'''
+    mapq_window = {chrom: [] for chrom in positions.keys()}
+
+    for chrom, reads in positions.items():
+
+        if not reads: #case chromosome has no reads
+            continue
+        
+        length_ref = header_parsed[chrom]
+        nb_windows = (length_ref // window_size) + 1 # calculate the number of windows needed to cover the reference
+        windows_mapq = [[] for _ in range(nb_windows)] # initialize a list to store MAPQ per window
+
+        # for each read we determine the range of windows it is on
+        for start, end, mapq in reads:
+            first_window = start // window_size
+            last_window = end // window_size
+            for window in range(first_window, last_window + 1):
+                if window == first_window:
+                    overlap = (first_window + 1) * window_size - start                    
+                    windows_mapq[window].append(mapq * overlap / window_size) #weight MAPQ by overlap
+                elif window == last_window:
+                    overlap = end - last_window * window_size                    
+                    windows_mapq[window].append(mapq * overlap / window_size) #weight MAPQ by overlap
+                else:    
+                    windows_mapq[window].append(mapq)
+        
+        #we calculate the mean MAPQ per window and we add to the dictionnary of repartition per chromosome
+        mean_mapq_counts = []
+        for mapqs in windows_mapq:
+            if mapqs:
+                mean_mapq = sum(mapqs) / len(mapqs)
+                mean_mapq_counts.append(round(mean_mapq, 3))
+            else:
+                mean_mapq_counts.append(0.0)
+        
+        mapq_window[chrom] = mean_mapq_counts
+    
+    print(mapq_window)
+    return mapq_window
+
+def plotReadsPerWindow(reads_window, mapq_window, window_size):
+    '''plot the number of reads per window on each chromosome, colored by mean MAPQ'''
 
     for chrom, counts in reads_window.items():
         if not counts: #case chromosome has no reads
             continue
+        
+        mapq_values = mapq_window[chrom]
 
+        # Normalize MAPQ values for color mapping
+        min_mapq = min(mapq_values)
+        max_mapq = max(mapq_values)
+
+        if max_mapq == min_mapq:
+            norm_mapq = [0.5 for _ in mapq_values]  # all same color if no variation
+        else:
+            norm_mapq = [(mapq - min_mapq) / (max_mapq - min_mapq) for mapq in mapq_values]
+
+        #create color map
+        colormap = cm.get_cmap('RdYlGn')
+        colors_mapped = [colormap(norm) for norm in norm_mapq]
+
+        # plot
         plt.figure(figsize=(10, 5))
-        plt.bar(range(len(counts)), counts, width=1.0, edgecolor='black')
+        plt.bar(range(len(counts)), counts, width=1.0, color = colors_mapped, edgecolor='none') #bar plot with colored bars red to green
         plt.xlabel(f'Windows of size {window_size} bp along {chrom}')
         plt.ylabel('Number of reads')
-        plt.title(f'Read distribution along {chrom}')
+        plt.title(f'Read distribution along {chrom} (colored by mean MAPQ)')
         plt.xticks(ticks=range(0, len(counts), max(1, len(counts)//10)), 
                    labels=[str(i * window_size) for i in range(0, len(counts), max(1, len(counts)//10))])
+        
+        #colorbar pour MAPQ
+        norm = colors.Normalize(vmin=min_mapq, vmax=max_mapq)
+        sm = cm.ScalarMappable(cmap=colormap, norm=norm)
+        sm.set_array([])
+        cbar = plt.colorbar(sm)
+        cbar.set_label('Mean MAPQ per window')
+        
         plt.grid(axis='y')
         plt.tight_layout()
         plt.show()
@@ -424,27 +491,74 @@ def main():
         sys.exit(1)
 
     input_file = sys.argv[1]
-    if check(input_file):
-        print("Format check OK")
+    
+    ## Check input file ##
 
-        filterMAPQ = int(input("Enter a MAPQ threshold to filter reads (or press Enter to skip): ") or "0")
-        fullyMappedOnly = input("Do you want to consider only fully mapped reads? (True/False): ")
-        window_size = int(input("Enter window size for read distribution (default 1000): ") or 1000)
+    if not check(input_file):
+        print("Error: input file is not a valid SAM file.")
+        sys.exit(1)
 
-        header_parsed = parse_header(input_file)
-        reads_extract = sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly)
-        count_mapped = readMapped(reads_extract)
-        count_flag = readFlag(reads_extract)
-        count_chrom = readCHROM(reads_extract)
-        count_mapq = readMAPQ(reads_extract,filterMAPQ)
+    print("Format check OK")
 
-        positions = positionsReads(reads_extract)
-        reads_window = readsPerWindow(positions, header_parsed, window_size)
-        plotReadsPerWindow(reads_window, window_size)
+    ## User inputs ##
 
-        Summary("summary.txt", count_flag, count_chrom, count_mapped, count_mapq)
+    # MAPQ threshold (optional) #
+    filterInput = input("Enter a MAPQ threshold to filter reads (or press Enter to skip): ")
+    if filterInput == "":
+        filterMAPQ = None
+    else:
+        try:
+            filterMAPQ = int(filterInput)
+            if not (0 <= filterMAPQ <= 60):
+                print("MAPQ threshold must be between 0 and 60.")
+                sys.exit(1)
+        except ValueError:
+            print("MAPQ threshold must be an integer.")
+            sys.exit(1)
+    
+    # Fully mapped reads only (mandatory) #
+    fullyMappedInput = input("Do you want to consider only fully mapped reads? (Yes/no): ")
+    if fullyMappedInput.lower() in ["yes", "y", "oui", "o", "true", "t"]:
+        fullyMappedOnly = True
+    else:
+        fullyMappedOnly = False
 
-        os.system("cat summary.txt")
+    # Window size for read distribution (mandatory) #
+    window_size_input = input("Enter window size for read distribution (default 1000): ")
+    if window_size_input == "":
+        window_size = 1000
+    else:
+        try:
+            window_size = int(window_size_input)
+            if window_size <= 0:
+                print("Window size must be a positive integer.")
+                sys.exit(1)
+        except ValueError:
+            print("Window size must be an integer.")
+            sys.exit(1)
+
+    ## Function on SAM file ##
+    header_parsed = parse_header(input_file)
+    reads_extract = sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly)
+    count_mapped = readMapped(reads_extract)
+    count_flag = readFlag(reads_extract)
+    count_chrom = readCHROM(reads_extract)
+
+    if filterMAPQ is None:
+        MAPQ_threshold = 36 #default threshold
+    else:
+        MAPQ_threshold = filterMAPQ
+
+    count_mapq = readMAPQ(reads_extract,MAPQ_threshold)
+
+    positions = positionsReads(reads_extract)
+    reads_window = readsPerWindow(positions, header_parsed, window_size)
+    mapq_window = meanMAPQPerWindow(positions, header_parsed, window_size)
+    plotReadsPerWindow(reads_window, mapq_window, window_size)
+
+    Summary("summary.txt", count_flag, count_chrom, count_mapped, count_mapq)
+
+    os.system("cat summary.txt")
             
 
 ############### LAUNCH THE SCRIPT ###############
