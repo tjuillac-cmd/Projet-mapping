@@ -14,7 +14,7 @@ def isFullyMapped(flag, cigar):
     if cigar == "*" or cigar == None: #unmapped
         return False 
     
-    ops = re.findall(r"[MIDNSHPX=]", cigar)
+    ops = re.findall(r"[MIDNSHPX=]", cigar) # extract operations from CIGAR string
 
     #case partially mapped
     if "S" in ops or "H" in ops:
@@ -353,6 +353,7 @@ def readsPerWindow(positions, header_parsed, window_size):
             continue
         
         length_ref = header_parsed[chrom]
+
         nb_windows = (length_ref // window_size) + 1 # calculate the number of windows needed to cover the reference
         windows_counts = [0.0] * nb_windows # initialize a list to count reads per window
 
@@ -437,7 +438,7 @@ def plotReadsPerWindow(reads_window, mapq_window, window_size):
         max_mapq = max(mapq_values)
 
         if max_mapq == min_mapq:
-            norm_mapq = [0.5 for _ in mapq_values]  # all same color if no variation
+            norm_mapq = [0.5 for x in mapq_values]  # all same color if no variation
         else:
             norm_mapq = [(mapq - min_mapq) / (max_mapq - min_mapq) for mapq in mapq_values]
 
@@ -459,7 +460,7 @@ def plotReadsPerWindow(reads_window, mapq_window, window_size):
         norm = colors.Normalize(vmin=min_mapq, vmax=max_mapq)
         sm = cm.ScalarMappable(cmap=colormap, norm=norm)
         sm.set_array([])
-        cbar = fig.colorbar(sm, ax = ax)
+        cbar = fig.colorbar(sm, ax = ax) #colorbar to show MAPQ scale
         cbar.set_label('Mean MAPQ per window')
         
         plt.grid(axis='y')
@@ -502,6 +503,10 @@ def main():
     else:
         fullyMappedOnly = False
 
+    
+    ## Function on SAM file ##
+    header_parsed = parse_header(input_file)
+
     # Window size for read distribution (mandatory) #
     window_size_input = input("Enter window size for read distribution (default 1000): ")
     if window_size_input == "":
@@ -510,14 +515,15 @@ def main():
         try:
             window_size = int(window_size_input)
             if window_size <= 0:
-                print("Window size must be a positive integer.")
-                sys.exit(1)
+                window_size = int(input("Window size must be a positive integer."))
+            
+            max_size = max(header_parsed.values())/2
+            if window_size > max_size:
+                window_size = int(input(f"Window size must be smaller than {max_size}."))
+                
         except ValueError:
             print("Window size must be an integer.")
             sys.exit(1)
-
-    ## Function on SAM file ##
-    header_parsed = parse_header(input_file)
     
     ## Analysis of filtered data ##
     reads_extract = sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly) #reads with user filtering
