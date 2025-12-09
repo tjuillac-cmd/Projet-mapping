@@ -26,9 +26,9 @@ def isFullyMapped(flag, cigar):
 
 
 def lengthRefCigar(cigar): 
-    '''calculate the length consumed on the reference sequence based on the CIGAR string'''
+    '''calculate the length consumed on the reference sequence based on CIGAR'''
    
-    ext = re.findall(r"(\d+)([MIDNSHPX=])",cigar) # split cigar on alpha numeric and numeric, ex. ext = ['1','0','0','M','5','S']
+    ext = re.findall(r"(\d+)([MIDNSHPX=])",cigar) # split cigar on alpha numeric and numeric, ex. ext = ['100','M','5','S']
     length = 0
 
     for nb, op in ext: # for each pair number-operation
@@ -38,6 +38,18 @@ def lengthRefCigar(cigar):
 
     return length
 
+def nbIndel(cigar):
+    '''calculate the number of indel in read based on CIGAR'''
+
+    ext = re.findall(r"(\d+)([MIDNSHPX=])",cigar) # split cigar on alpha numeric and numeric, ex. ext = ['100','M','5','S']
+    indel_count = 0
+
+    for nb, op in ext:
+
+        if op in ("I", "D"):
+            indel_count += int(nb)
+
+    return indel_count
 
 ############### SAM FILE CHECK FUNCTION ###############
 
@@ -223,101 +235,271 @@ def parse_header(input_file):
     return length_ref
 
 
-################ RAW DATA STATISTICS FUNCTIONS ###############
+################ STATISTICS FUNCTIONS ###############
 
-def readMapped(reads_extract_raw):
+def readMapped(reads_extract):
     '''count the number of mapped, unmapped and total reads {'mapped': x, 'unmapped': y, 'total': z}'''
     count_mapped = {'mapped': 0, 'unmapped': 0, 'total': 0}
-    for chromosome in reads_extract_raw:
-        for read in reads_extract_raw[chromosome]:
+    for chromosome in reads_extract:
+        for read in reads_extract[chromosome]:
             flag = read[1]
             count_mapped['total'] += 1
             if flag & 4 == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
                 count_mapped['mapped'] += 1
             else:
                 count_mapped['unmapped'] += 1
-    print(count_mapped)
     return count_mapped
 
 
-def readFlag(reads_extract_raw):
+def readFlag(reads_extract):
     '''count the number of reads per flag {flag: count}'''
-    count_flag = {}
-    for chromosome in reads_extract_raw:
-        for read in reads_extract_raw[chromosome]:
-            if read[1] in count_flag:
-                count_flag[read[1]] += 1
-            else:
-                count_flag[read[1]] = count_flag.get(read[1],0) + 1
-    print(count_flag)
-    return count_flag
+    readsByName = {}
+    paired_orientation = {} #count percentage of properly paired reads and of properly oriented pairs
+
+    for chromosome in reads_extract:
+        for read in reads_extract[chromosome]:
+
+            qname = read[0]
+            flag = read[1]
+
+            if qname not in readsByName: #we fill the dictionnary with flags for each qname (to see properly paired reads)
+                readsByName[qname] = []
+            readsByName[qname].append(flag)
+
+        total, properly_paired, properly_oriented = 0, 0, 0
+
+        for qname, flags in readsByName.items():
+            total += 1
+
+            if len(flags) != 2: #skip unpaired reads
+                continue
+
+            f1, f2 = flags
+
+            #check if properly paired (bit 0x40 et 0x80 in either f1 or f2 and 0x2 in both) 
+            if ((f1 & 0x80 and f2 & 0x40) or (f2 & 0x80 and f1 & 0x40)) and f1 & 0x2 and f2 & 0x2:
+                properly_paired += 1
+
+            #check if properly oriented (RF or FR but FF or RR are misoriented)
+            #bit 0x10 indicates R
+            if f1 & 0x10 and not f2 & 0x10:
+                properly_oriented += 1
+                    
+            elif f2 & 0x10 and not f1 & 0x10:
+                properly_oriented += 1
+            
+            perc_properly_paired = round(100*properly_paired / total, 2)
+            perc_properly_oriented = round(100*properly_oriented / total, 2)
+            paired_orientation[chromosome] = [perc_properly_paired, perc_properly_oriented]
+        
+    return paired_orientation
 
 
-def readCHROM(reads_extract_raw):
+def readCHROM(reads_extract):
     '''count the number of mapped and unmapped reads per chromosome {chromosome: [mapped, unmapped]}'''
-    count_chrom= {key: [0, 0] for key in reads_extract_raw.keys()} #create a counting dico with same keys as reads_extract 
-    for chromosome in reads_extract_raw:
-        for read in reads_extract_raw[chromosome]:
+    count_chrom= {key: [0, 0] for key in reads_extract.keys()} #create a counting dico with same keys as reads_extract 
+    for chromosome in reads_extract:
+        for read in reads_extract[chromosome]:
             if read[1] & 4 == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
                 count_chrom[chromosome][0] += 1 #count_chrom[chromosome][0] is the number of mapped reads
             else:
                 count_chrom[chromosome][1] +=1 #count_chrom[chromosome][1] is the number of unmapped reads
-    print(count_chrom)
     return count_chrom
 
 
-def readMAPQ(reads_extract_raw, MAPQ_threshold):
+def readMAPQ(reads_extract, MAPQ_threshold):
     '''count the number of reads per MAPQ {MAPQ above threshold, MAPQ below threshold}'''
-    if MAPQ_threshold == 0:
-        threshold = 36 #default threshold
-    else:
-        threshold = MAPQ_threshold
 
-    above = f"MAPQ above {threshold}"
-    below = f"MAPQ below {threshold}"
-    count_mapq = {above : 0, below : 0}
+    count_mapq = {chromosome: [0, 0] for chromosome in reads_extract.keys()} #dict {chromosome: [nb mapped, nb unmapped]}
 
-    for chromosome in reads_extract_raw:
-        for read in reads_extract_raw[chromosome]:
-            if read[3] >= threshold :
-                count_mapq[above] += 1
+    for chromosome in reads_extract:
+        for read in reads_extract[chromosome]:
+            mapq = read[3]
+
+            if mapq >= MAPQ_threshold :
+                count_mapq[chromosome][0] += 1
             else:
-                count_mapq[below] += 1
-    print(count_mapq)
+                count_mapq[chromosome][1] += 1
+
     return count_mapq
 
 
-def Summary(fileName, count_flag, count_chrom, count_mapped, count_mapq):
+def statAlignment(reads_extract, short_size, large_size):
+    '''return basic statistics on alignment length'''
+    lengths = {key: [] for key in reads_extract.keys()}
+    stats = {key: [] for key in reads_extract.keys()}
+
+    for chromosome in reads_extract:
+        for read in reads_extract[chromosome]:
+            cigar = read[4]
+            length = lengthRefCigar(cigar)
+            lengths[chromosome].append(length)
+
+    for chromosome in lengths:
+        under50, over250, mean, total, min_len, max_len = 0, 0, 0, len(lengths[chromosome]), min(lengths[chromosome]), max(lengths[chromosome])
+        
+        for length in lengths[chromosome]:
+            mean += length
+
+            if length <= short_size:
+                under50 += 1
+
+            if length >= large_size:
+                over250 += 1
+        
+        mean = round(mean / total, 3)
+        stats[chromosome] = (under50, over250, mean, total, min_len, max_len)
+
+    return stats
+
+def statIndel(reads_extract):
+    '''calculate percentage of reads w/ at least one indel'''
+    indel_dict = {key: 0 for key in reads_extract.keys()}
+
+    for chromosome in reads_extract:
+        total, atLeastOne = 0, 0
+        for read in reads_extract[chromosome]:
+            
+            total += 1
+            cigar = read[4]
+            nb_indel = nbIndel(cigar)
+
+            if nb_indel >= 1:
+                atLeastOne += 1
+        
+        indel_dict[chromosome] += round(atLeastOne / total, 2)
+    
+    return indel_dict
+
+def Summary(fileName, paired_orientation, count_chrom, count_mapped, count_mapq, stat_alignment, short_size, long_size, MAPQ_threshold, stat_indel):
     '''create a text file to summarize the results'''
     with open(fileName, "w") as fileSummary: #open file in write mode
         fileSummary.write("============ Summary of SAM file ============\n\n")
 
-        #1) output mapped reads, unmapped reads and total reads
-        fileSummary.write("Reads mapping information:\n")
-        for key, value in count_mapped.items():
-            fileSummary.write(f"{key} reads: {value}\n") #write mapped, unmapped and total reads
-        fileSummary.write("\n=============================================\n")
+        #table header
+        fileSummary.write(f"CHR_NAME\tTOT_READS\tMAP\tUMAP\tMAPQ-\tMAPQ+\tPAIR%\tRF%\t")
+        fileSummary.write(f"<{short_size}BP%\tINT%\t>{long_size}BP%\tMEANL\tMINL\tMAXL\tINDEL%\n")
 
-        #2) output reads per flag
-        fileSummary.write("Reads per flag:\n")
-        for flag, count in count_flag.items():
-            fileSummary.write(f"{flag} : {count} reads\n") #write each flag and its count
-        fileSummary.write("\n=============================================\n")
+        #CHROM_NAME
+        for chromosome in count_chrom.keys():
+            fileSummary.write(f"{chromosome}\t")
+
+            #TOTAL_READS, MAPPED_READS, UNMAPPED_READS
+            total_reads = count_chrom[chromosome][0] + count_chrom[chromosome][1]
+            mapped_reads = count_chrom[chromosome][0]
+            unmapped_reads = count_chrom[chromosome][1]
+            fileSummary.write(f"{total_reads}\t{mapped_reads}\t{unmapped_reads}\t")
+
+            #MAPQ<={MAPQ_threshold}, MAPQ>{MAPQ_threshold}
+            mapq_below = count_mapq[chromosome][1]
+            mapq_above = count_mapq[chromosome][0]
+            fileSummary.write(f"{mapq_below}\t{mapq_above}\t")
+
+            #%_PROP_PAIRED, %_PROP_ORIENTED
+            perc_properly_paired = paired_orientation[chromosome][0]
+            perc_properly_oriented = paired_orientation[chromosome][1]
+            fileSummary.write(f"{perc_properly_paired}\t{perc_properly_oriented}\t")
+
+            #<{short_size}BP%, [{short_size};{long_size}BP]%, >{long_size}BP%, MEAN_LENGTH, MIN_LENGTH, MAX_LENGTH
+            under = stat_alignment[chromosome][0]
+            over = stat_alignment[chromosome][1]
+            mean_len = stat_alignment[chromosome][2]
+            total_len = stat_alignment[chromosome][3]
+            min_len = stat_alignment[chromosome][4]
+            max_len = stat_alignment[chromosome][5]
+
+            fileSummary.write(f"{round(under/total_len,2)*100}%\t")
+            fileSummary.write(f"{100-(round(over/total_len,2)+round(under/total_len,2))*100}%\t")
+            fileSummary.write(f"{round(over/total_len,2)*100}%\t")         
+            fileSummary.write(f"{mean_len}\t") 
+            fileSummary.write(f"{min_len}\t") 
+            fileSummary.write(f"{max_len}\t")
+
+            #percentage of reads w/ at least one indel
+            fileSummary.write(f"{stat_indel[chromosome]}\n")
+
+        fileSummary.write(f"\nLEGEND:\nCHR_NAME: Chromosome name\nTOT_READS: Total reads\nMAP: Mapped reads\nUMAP: Unmapped reads\n")
+        fileSummary.write(f"MAPQ-: Reads with MAPQ less than or equal to {MAPQ_threshold}\nMAPQ+: Reads with MAPQ greater than {MAPQ_threshold}\n")
+        fileSummary.write(f"PAIR%: Percentage of properly paired reads\nRF%: Percentage of properly oriented pairs (forward-reverse or reverse-forward)\n")
+        fileSummary.write(f"<{short_size}BP%: Percentage of reads with length less than {short_size} bp\n")
+        fileSummary.write(f"INT%: Percentage of reads with intermediate length (between {short_size} and {long_size} bp)\n")
+        fileSummary.write(f">{long_size}BP%: Percentage of reads with length greater than {long_size} bp\n")
+        fileSummary.write(f"MEANL: Mean length of alignments\nMINL: Minimum length of alignments\nMAXL: Maximum length of alignments\n")
+        fileSummary.write(f"INDEL%: Percentage of reads with at least one indel\n\n")
+
+        # #1) output mapped reads, unmapped reads and total reads
+        # fileSummary.write("#Reads mapping information:\n")
+        # for key, value in count_mapped.items():
+        #     fileSummary.write(f"{key}\t") #write mapped, unmapped and total (header)
+        # fileSummary.write("\n")
+        # for key, value in count_mapped.items():
+        #     fileSummary.write(f"{value}\t") #write mapped, unmapped and total counts (data)
+
+        # #2) output reads per flag
+        # fileSummary.write("\n\n#Reads per flag:\n")
+        # for flag, count in paired_orientation.items():
+        #     fileSummary.write(f"{flag}\t") #write each flag
+        # fileSummary.write("\n")
+
+        # for flag, count in paired_orientation.items():
+        #     fileSummary.write(f"{count}\t") #write the count for each
+
+        # #3) output reads per chromosome
+        # fileSummary.write("\n\n#Reads per chromosome:\n")
         
-        #3) output reads per chromosome
-        fileSummary.write("Reads per chromosome:\n")
-        for chrom, counts in count_chrom.items():
-            fileSummary.write(f"{chrom} : {counts[0]} mapped reads, {counts[1]} unmapped reads\n") #write each chromosome and its mapped/unmapped counts
-        fileSummary.write("\n=============================================\n")
+        # #table header
+        # fileSummary.write(f"chrom_name\t")
+        # fileSummary.write(f"mapped\t")
+        # fileSummary.write(f"unmapped\t")
 
-        #4) output reads per MAPQ
-        fileSummary.write("Summary of reads repartition per mapping quality:\n")
-        for key, value in count_mapq.items():
-            fileSummary.write(f"{key} : {value} reads\n") #write MAPQ summary
-        fileSummary.write("\n=============================================\n")
+        # for chrom, counts in count_chrom.items(): #table data
+        #     fileSummary.write(f"\n{chrom}\t")
+        #     fileSummary.write(f"{counts[0]}\t") #write each chromosome and its mapped/unmapped counts
+        #     fileSummary.write(f"{counts[1]}\n") #write each chromosome and its mapped/unmapped counts
 
-        print(f"Summary written in {fileName}")
 
+        # #4) output reads per MAPQ
+        # fileSummary.write("\n\n#Summary of reads repartition per mapping quality:\n")
+        # fileSummary.write(f"MAPQ<={MAPQ_threshold}\t")
+        # fileSummary.write(f"MAPQ>{MAPQ_threshold}\n")
+
+        # for key, value in count_mapq.items():
+        #     fileSummary.write(f"{value}\t") #write MAPQ summary
+
+        # #5) alignment lengths stats
+        # fileSummary.write("\n\n#Basic statistics of alignment:\n")
+
+        # #table header
+        # fileSummary.write(f"chrom_name\t")
+        # fileSummary.write(f"<{short_size}bp%\t")
+        # fileSummary.write(f"[{short_size}; {long_size}bp]%\t")
+        # fileSummary.write(f">{long_size}bp%\t")
+        # fileSummary.write(f"mean\t")
+        # fileSummary.write(f"min\t")
+        # fileSummary.write(f"max\n")
+
+        # for chromosome in stat_alignment.keys():
+
+        #     under = stat_alignment[chromosome][0]
+        #     over = stat_alignment[chromosome][1]
+        #     mean_len = stat_alignment[chromosome][2]
+        #     total = stat_alignment[chromosome][3]
+        #     min_len = stat_alignment[chromosome][4]
+        #     max_len = stat_alignment[chromosome][5]
+
+        #     #table data
+        #     fileSummary.write(f"{chromosome}\t")
+        #     fileSummary.write(f"{round(under/total,2)*100}%\t")
+        #     fileSummary.write(f"{100-(round(over/total,2)+round(under/total,2))*100}%\t")
+        #     fileSummary.write(f"{round(over/total,2)*100}%\t")         
+        #     fileSummary.write(f"{mean_len}\t") 
+        #     fileSummary.write(f"{min_len}\t") 
+        #     fileSummary.write(f"{max_len}\n")
+
+        # print(f"\nSummary written in {fileName}\n")
+
+        # #6) percentage of reads w/ at least one indel
+        # fileSummary.write(f"{stat_indel}% of reads with at least 1 indel.")
 
 ################ STATISTICS ON FILTERED DATA ###############
 
@@ -382,7 +564,6 @@ def readsPerWindow(positions, header_parsed, window_size):
         windows_counts = [round(c, 3) for c in windows_counts]
         reads_window[chrom] = windows_counts
     
-    print(reads_window)
     return reads_window
 
 
@@ -422,7 +603,6 @@ def meanMAPQPerWindow(positions, header_parsed, window_size, MAPQ_threshold):
         
         mapq_window[chrom] = mean_mapq_counts
     
-    print(mapq_window)
     return mapq_window
 
 
@@ -528,6 +708,29 @@ def main():
         except ValueError:
             print("Window size must be an integer.")
             sys.exit(1)
+
+    # Sizes for short and small reads
+
+    short_size_input = input("Enter a threshold size for small reads or press ENTER (default 80): ")
+    if short_size_input == "":
+        short_size = 80
+    else:
+        try:
+            short_size = int(short_size_input)
+        except ValueError:
+            print("Size must be an integer.")
+            sys.exit(1)
+
+    long_size_input = input("Enter a threshold size for long reads or press ENTER (default 200): ")
+    if long_size_input == "":
+        long_size = 200
+    else:
+        try:
+            long_size = int(long_size_input)
+        except ValueError:
+            print("Size must be an integer.")
+            sys.exit(1)
+
     
     ## Analysis of filtered data ##
     reads_extract = sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly) #reads with user filtering
@@ -540,16 +743,16 @@ def main():
     positions = positionsReads(reads_extract)
     reads_window = readsPerWindow(positions, header_parsed, window_size)
     mapq_window = meanMAPQPerWindow(positions, header_parsed, window_size, MAPQ_threshold)
+    stat_alignment = statAlignment(reads_extract, short_size, long_size)
+    stat_indel = statIndel(reads_extract)
+    count_mapped = readMapped(reads_extract)
+    paired_orientation = readFlag(reads_extract)
+    count_chrom = readCHROM(reads_extract)
+    count_mapq = readMAPQ(reads_extract, MAPQ_threshold)
+
+    Summary("summary.txt", paired_orientation, count_chrom, count_mapped, count_mapq, stat_alignment, short_size, long_size, MAPQ_threshold, stat_indel)
     plotReadsPerWindow(reads_window, mapq_window, window_size)
 
-    ## Statistics of raw data wtihout filtering ##
-    reads_extract_raw = sam_reader(input_file, header_parsed, None, False) #reads without any filtering for total counts
-    count_mapped = readMapped(reads_extract_raw)
-    count_flag = readFlag(reads_extract_raw)
-    count_chrom = readCHROM(reads_extract_raw)
-    count_mapq = readMAPQ(reads_extract_raw, MAPQ_threshold)
-
-    Summary("summary.txt", count_flag, count_chrom, count_mapped, count_mapq)
 
     os.system("cat summary.txt")
             
