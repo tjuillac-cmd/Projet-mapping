@@ -237,20 +237,6 @@ def parse_header(input_file):
 
 ################ STATISTICS FUNCTIONS ###############
 
-def readMapped(reads_extract):
-    '''count the number of mapped, unmapped and total reads {'mapped': x, 'unmapped': y, 'total': z}'''
-    count_mapped = {'mapped': 0, 'unmapped': 0, 'total': 0}
-    for chromosome in reads_extract:
-        for read in reads_extract[chromosome]:
-            flag = read[1]
-            count_mapped['total'] += 1
-            if flag & 4 == 0: # check if the read is mapped, if the flag has the bit 4 it means it is unmapped
-                count_mapped['mapped'] += 1
-            else:
-                count_mapped['unmapped'] += 1
-    return count_mapped
-
-
 def readFlag(reads_extract):
     '''count the number of reads per flag {flag: count}'''
     readsByName = {}
@@ -371,13 +357,13 @@ def statIndel(reads_extract):
     
     return indel_dict
 
-def Summary(fileName, paired_orientation, count_chrom, count_mapped, count_mapq, stat_alignment, short_size, long_size, MAPQ_threshold, stat_indel):
+def Summary(fileName, paired_orientation, count_chrom, count_mapq, stat_alignment, short_size, long_size, MAPQ_threshold, stat_indel):
     '''create a text file to summarize the results'''
     with open(fileName, "w") as fileSummary: #open file in write mode
-        fileSummary.write("============ Summary of SAM file ============\n\n")
+        fileSummary.write("===================================================== Summary of SAM file =====================================================\n\n")
 
         #table header
-        fileSummary.write(f"CHR_NAME\tTOT_READS\tMAP\tUMAP\tMAPQ-\tMAPQ+\tPAIR%\tRF%\t")
+        fileSummary.write(f"CHR_NAME\tTOTAL\tMAP\tUMAP\tMAPQ-\tMAPQ+\tPAIR%\tRF%\t")
         fileSummary.write(f"<{short_size}BP%\tINT%\t>{long_size}BP%\tMEANL\tMINL\tMAXL\tINDEL%\n")
 
         #CHROM_NAME
@@ -418,7 +404,7 @@ def Summary(fileName, paired_orientation, count_chrom, count_mapped, count_mapq,
             #percentage of reads w/ at least one indel
             fileSummary.write(f"{stat_indel[chromosome]}\n")
 
-        fileSummary.write(f"\nLEGEND:\nCHR_NAME: Chromosome name\nTOT_READS: Total reads\nMAP: Mapped reads\nUMAP: Unmapped reads\n")
+        fileSummary.write(f"\nLEGEND:\nCHR_NAME: Chromosome name\nTOTAL: Total reads\nMAP: Mapped reads\nUMAP: Unmapped reads\n")
         fileSummary.write(f"MAPQ-: Reads with MAPQ less than or equal to {MAPQ_threshold}\nMAPQ+: Reads with MAPQ greater than {MAPQ_threshold}\n")
         fileSummary.write(f"PAIR%: Percentage of properly paired reads\nRF%: Percentage of properly oriented pairs (forward-reverse or reverse-forward)\n")
         fileSummary.write(f"<{short_size}BP%: Percentage of reads with length less than {short_size} bp\n")
@@ -619,9 +605,9 @@ def main():
     header_parsed = parse_header(input_file)
 
     # Window size for read distribution (mandatory) #
-    window_size_input = input("Enter window size for read distribution (default 1000): ")
+    window_size_input = input("Enter window size for read distribution (default 15000): ")
     if window_size_input == "":
-        window_size = 1000
+        window_size = 15000
     else:
         try:
             window_size = int(window_size_input)
@@ -658,6 +644,20 @@ def main():
             print("Size must be an integer.")
             sys.exit(1)
 
+    # Summary file name
+
+    file_name_input = input("A summary file will be created in .txt format. How do you want to call it? (default summary.txt) ")
+    
+    if " " in file_name_input: #avoid space in file name
+        file_name_input = input("File name must not contain \" \". Try again")
+    
+    if file_name_input == "": #default name
+        file_name_input = "summary.txt"
+    
+    file_name = file_name_input
+
+    if not file_name.endswith(".txt"): #add extension if not existing
+        file_name += ".txt"
     
     ## Analysis of filtered data ##
     reads_extract = sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly) #reads with user filtering
@@ -672,12 +672,11 @@ def main():
     mapq_window = meanMAPQPerWindow(positions, header_parsed, window_size, MAPQ_threshold)
     stat_alignment = statAlignment(reads_extract, short_size, long_size)
     stat_indel = statIndel(reads_extract)
-    count_mapped = readMapped(reads_extract)
     paired_orientation = readFlag(reads_extract)
     count_chrom = readCHROM(reads_extract)
     count_mapq = readMAPQ(reads_extract, MAPQ_threshold)
 
-    Summary("summary.txt", paired_orientation, count_chrom, count_mapped, count_mapq, stat_alignment, short_size, long_size, MAPQ_threshold, stat_indel)
+    Summary(file_name, paired_orientation, count_chrom, count_mapq, stat_alignment, short_size, long_size, MAPQ_threshold, stat_indel)
     plotReadsPerWindow(reads_window, mapq_window, window_size)
 
 
