@@ -266,11 +266,17 @@ def readCHROM(reads_extract_raw):
     return count_chrom
 
 
-def readMAPQ(reads_extract_raw,threshold):
+def readMAPQ(reads_extract_raw, MAPQ_threshold):
     '''count the number of reads per MAPQ {MAPQ above threshold, MAPQ below threshold}'''
+    if MAPQ_threshold == 0:
+        threshold = 36 #default threshold
+    else:
+        threshold = MAPQ_threshold
+
     above = f"MAPQ above {threshold}"
     below = f"MAPQ below {threshold}"
     count_mapq = {above : 0, below : 0}
+
     for chromosome in reads_extract_raw:
         for read in reads_extract_raw[chromosome]:
             if read[3] >= threshold :
@@ -372,7 +378,7 @@ def readsPerWindow(positions, header_parsed, window_size):
                 else:    
                     windows_counts[window] += 1.0
         
-        #we round up and we add to the dictionnary of repartition per chromosome
+        #round up and add to the dictionnary of repartition per chromosome
         windows_counts = [round(c, 3) for c in windows_counts]
         reads_window[chrom] = windows_counts
     
@@ -380,7 +386,7 @@ def readsPerWindow(positions, header_parsed, window_size):
     return reads_window
 
 
-def meanMAPQPerWindow(positions, header_parsed, window_size):
+def meanMAPQPerWindow(positions, header_parsed, window_size, MAPQ_threshold):
     '''calculate the mean MAPQ per window on each reference'''
     mapq_window = {chrom: [] for chrom in positions.keys()}
 
@@ -388,24 +394,22 @@ def meanMAPQPerWindow(positions, header_parsed, window_size):
 
         if not reads: #case chromosome has no reads
             continue
-        
+
         length_ref = header_parsed[chrom]
         nb_windows = (length_ref // window_size) + 1 # calculate the number of windows needed to cover the reference
         windows_mapq = [[] for _ in range(nb_windows)] # initialize a list to store MAPQ per window
 
         # for each read we determine the range of windows it is on
         for start, end, mapq in reads:
+
+            if mapq < MAPQ_threshold: #skip mapq values below threshold
+                continue
+
             first_window = start // window_size
             last_window = end // window_size
             for window in range(first_window, last_window + 1):
-                if window == first_window:
-                    overlap = (first_window + 1) * window_size - start                    
-                    windows_mapq[window].append(mapq * overlap / window_size) #weight MAPQ by overlap
-                elif window == last_window:
-                    overlap = end - last_window * window_size                    
-                    windows_mapq[window].append(mapq * overlap / window_size) #weight MAPQ by overlap
-                else:    
-                    windows_mapq[window].append(mapq)
+
+                windows_mapq[window].append(mapq)
         
         #we calculate the mean MAPQ per window and we add to the dictionnary of repartition per chromosome
         mean_mapq_counts = []
@@ -483,7 +487,7 @@ def main():
     ## User inputs ##
 
     # MAPQ threshold (optional) #
-    filterInput = input("Enter a MAPQ threshold to filter reads (or press Enter to skip): ")
+    filterInput = input("Enter a MAPQ threshold to filter reads or press Enter to skip (default 0): ")
     if filterInput == "":
         filterMAPQ = None
     else:
@@ -497,7 +501,7 @@ def main():
             sys.exit(1)
     
     # Fully mapped reads only (mandatory) #
-    fullyMappedInput = input("Do you want to consider only fully mapped reads? (Yes/no): ")
+    fullyMappedInput = input("Do you want to consider only fully mapped reads? (yes/NO): ")
     if fullyMappedInput.lower() in ["yes", "y", "oui", "o", "true", "t"]:
         fullyMappedOnly = True
     else:
@@ -529,13 +533,13 @@ def main():
     reads_extract = sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly) #reads with user filtering
 
     if filterMAPQ is None:
-        MAPQ_threshold = 36 #default threshold
+        MAPQ_threshold = 0 #default threshold
     else:
         MAPQ_threshold = filterMAPQ
-
+           
     positions = positionsReads(reads_extract)
     reads_window = readsPerWindow(positions, header_parsed, window_size)
-    mapq_window = meanMAPQPerWindow(positions, header_parsed, window_size)
+    mapq_window = meanMAPQPerWindow(positions, header_parsed, window_size, MAPQ_threshold)
     plotReadsPerWindow(reads_window, mapq_window, window_size)
 
     ## Statistics of raw data wtihout filtering ##
