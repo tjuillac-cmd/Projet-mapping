@@ -399,9 +399,9 @@ def Summary(fileName, dir_name, paired_orientation, count_chrom, count_mapq, sta
         fileSummary.write(f"\nLEGEND:\nCHR_NAME: Chromosome name\nTOTAL: Total reads\nMAP: Mapped reads\nUMAP: Unmapped reads\n")
         fileSummary.write(f"MAPQ-: Reads with MAPQ less than or equal to {MAPQ_threshold}\nMAPQ+: Reads with MAPQ greater than {MAPQ_threshold}\n")
         fileSummary.write(f"PAIR%: Percentage of properly paired reads\nRF%: Percentage of properly oriented pairs (forward-reverse or reverse-forward)\n")
-        fileSummary.write(f"<{short_size}BP%: Percentage of reads with length less than {short_size} bp\n")
-        fileSummary.write(f"INT%: Percentage of reads with intermediate length (between {short_size} and {long_size} bp)\n")
-        fileSummary.write(f">{long_size}BP%: Percentage of reads with length greater than {long_size} bp\n")
+        fileSummary.write(f"<{short_size}BP%: Percentage of reads with alignmed length less than {short_size} bp\n")
+        fileSummary.write(f"INT%: Percentage of reads with intermediate aligned length (between {short_size} and {long_size} bp)\n")
+        fileSummary.write(f">{long_size}BP%: Percentage of reads with aligned length greater than {long_size} bp\n")
         fileSummary.write(f"MEANL: Mean length of alignments\nMINL: Minimum length of alignments\nMAXL: Maximum length of alignments\n")
         fileSummary.write(f"INDEL%: Percentage of reads with at least one indel\n\n")
 
@@ -642,7 +642,7 @@ def main():
 
         # Sizes for short and small reads
 
-        short_size_input = input("Enter a threshold size for small reads or press ENTER (default 80): ")
+        short_size_input = input("Enter a threshold size for small alignments or press ENTER (default 80): ")
         if short_size_input == "":
             short_size = 80
         else:
@@ -653,7 +653,7 @@ def main():
                 except ValueError:
                     short_size_input = input("Size must be an integer. Try again: ")
 
-        long_size_input = input("Enter a threshold size for long reads or press ENTER (default 200): ")
+        long_size_input = input("Enter a threshold size for long alignments or press ENTER (default 200): ")
         if long_size_input == "":
             long_size = 200
         else:
