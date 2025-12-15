@@ -10,8 +10,7 @@ This work was carried out as part of a Master's degree project in Bioinformatics
 
 ## Author
 
-Copyright © 2025 -- Thomas JUILLAC
-Email: <thomas.juillac@etu.umontpellier.fr> <thomas.juillac@supagro.fr>
+Copyright © 2025 -- Thomas JUILLAC <thomas.juillac@etu.umontpellier.fr> <thomas.juillac@supagro.fr>
 
 
 ## Requirements
