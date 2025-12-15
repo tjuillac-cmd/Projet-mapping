@@ -14,15 +14,13 @@ def isFullyMapped(flag, cigar):
     if cigar == "*" or cigar == None: #unmapped
         return False 
     
-    ops = re.findall(r"[MIDNSHPX=]", cigar) # extract operations from CIGAR string
+    ops = re.findall(r"[MIDNSHPX=]", cigar) #extract operations from CIGAR string
 
-    #case partially mapped
-    if "S" in ops or "H" in ops:
-        return False    
-    
     #case mapped
-    if all(op in ["M", "D", "N", "X", "="] for op in ops):
+    if ops == ['M']:
         return True
+    
+    return False #in any other case read is partially mapped
 
 
 def lengthRefCigar(cigar): 
@@ -53,129 +51,120 @@ def nbIndel(cigar):
 
 ############### SAM FILE CHECK FUNCTION ###############
 
-def check(input_file):
+def check(line, line_index):
     '''
-    Check if the input file exists and is in .sam format.
-    Verifies that each alignment line (non-header) contains at least the 11 "mandatory" fields
+    Verifies that each line (non-header) contains at least the 11 "mandatory" fields and that the header lines has SN and LN
     '''
-    if not os.path.exists(input_file): #check existence
-        print("No file found")
-        sys.exit(1)
-    if not input_file.endswith(".sam"): #check extension
-        print("File must be in .sam format")
-        sys.exit(1)
-    print("File exists and format check OK")
-
-    with open(input_file, "r") as file: #open file in read mode
-        for line_index, line in enumerate(file,start=1):
-            if line.startswith("@"): #check header
-                if line.startswith("@SQ"):
-                    if "SN:" not in line or "LN:" not in line: #check for mandatory fields
-                        print(f"Error at line {line_index}: @SQ must contain SN: and LN:.")
-                        sys.exit(1)                                     
-                continue
-
-            #Process alignment lines
-            columns = line.strip().split("\t")
-
-            #Check for at least 11 mandatory fields
-            if len(columns) < 11:
-                print(f"Format error at line {line_index}: less than 11 fields.")
+  
+    if line.startswith("@"): #check header
+        if line.startswith("@SQ"):
+            if "SN:" not in line or "LN:" not in line: #check for mandatory fields
+                print(f"Error at line {line_index}: @SQ must contain SN: and LN:.")
                 sys.exit(1)
 
-            #Ger the first 11 mandatory fields
-            qname, flag, rname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = columns[:11]
+    else:
 
-            #Check for empty mandatory fields
-            if any(field == "" for field in columns[:11]):
-                print(f"Format error at line {line_index}: one of the 11 mandatory fields is empty.")
-                sys.exit(1)
+        #Process alignment lines
+        columns = line.strip().split("\t")
 
-            #Check if each field is in correct Regexp/Range
-            #QNAME
-            if not re.fullmatch(r'[!-?A-~]{1,254}', qname):
-                print(f"Format error at line {line_index}: QNAME incorrect.")
-                sys.exit(1)
-            
-            #FLAG: first check if of type integer then if in the right range
-            try:
-                flag_int = int(flag)
-            except ValueError:
-                print(f"Format error at line {line_index}: FLAG must be an interger.")
-                sys.exit(1)
-            
-            if not (0 <= flag_int <= 2**16 - 1):
-                print(f"Format error at line {line_index}: FLAG incorrect.")
-                sys.exit(1)
+        #Check for at least 11 mandatory fields
+        if len(columns) < 11:
+            print(f"Format error at line {line_index}: less than 11 fields.")
+            sys.exit(1)
 
-            #RNAME
-            if not re.fullmatch(r'\*|[0-9A-Za-z!#$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*', rname):
-                print(f"Format error at line {line_index}: RNAME incorrect.")
-                sys.exit(1)
+        #Ger the first 11 mandatory fields
+        qname, flag, rname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual = columns[:11]
 
-            #POS: first check if of type integer then if in the right range
-            try:
-                pos_int = int(pos)
-            except ValueError:
-                print(f"Format error at line {line_index}: POS must be an interger.")
-                sys.exit(1)
+        #Check for empty mandatory fields
+        if any(field == "" for field in columns[:11]):
+            print(f"Format error at line {line_index}: one of the 11 mandatory fields is empty.")
+            sys.exit(1)
 
-            if not (0 <= pos_int <= 2**31 - 1):
-                print(f"Format error at line {line_index}: POS incorrect.")
-                sys.exit(1)
+        #Check if each field is in correct Regexp/Range
+        #QNAME
+        if not re.fullmatch(r'[!-?A-~]{1,254}', qname):
+            print(f"Format error at line {line_index}: QNAME incorrect.")
+            sys.exit(1)
+                
+        #FLAG: first check if of type integer then if in the right range
+        try:
+            flag_int = int(flag)
+        except ValueError:
+            print(f"Format error at line {line_index}: FLAG must be an interger.")
+            sys.exit(1)
+                
+        if not (0 <= flag_int <= 2**16 - 1):
+            print(f"Format error at line {line_index}: FLAG incorrect.")
+            sys.exit(1)
 
-            #MAPQ: first check if of type integer then if in the right range
-            try:
-                mapq_int = int(mapq)
-            except ValueError:
-                print(f"Format error at line {line_index}: MAPQ must be an interger.")
-                sys.exit(1)
+        #RNAME
+        if not re.fullmatch(r'\*|[0-9A-Za-z!#$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*', rname):
+            print(f"Format error at line {line_index}: RNAME incorrect.")
+            sys.exit(1)
 
-            if not (0 <= mapq_int <= 2**8 - 1):
-                print(f"Format error at line {line_index}: MAPQ incorrect.")
-                sys.exit(1)
+        #POS: first check if of type integer then if in the right range
+        try:
+            pos_int = int(pos)
+        except ValueError:
+            print(f"Format error at line {line_index}: POS must be an interger.")
+            sys.exit(1)
 
-            #CIGAR
-            if not re.fullmatch(r'\*|([0-9]+[MIDNSHPX=])+', cigar):
-                print(f"Format error at line {line_index}: CIGAR incorrect.")
-                sys.exit(1)
+        if not (0 <= pos_int <= 2**31 - 1):
+            print(f"Format error at line {line_index}: POS incorrect.")
+            sys.exit(1)
 
-            #RNEXT
-            if not re.fullmatch(r'(?:\*|=|[0-9A-Za-z!#$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)', rnext):
-                print(f"Format error at line {line_index}: RNEXT incorrect.")
-                sys.exit(1)
+        #MAPQ: first check if of type integer then if in the right range
+        try:
+            mapq_int = int(mapq)
+        except ValueError:
+            print(f"Format error at line {line_index}: MAPQ must be an interger.")
+            sys.exit(1)
 
-            #PNEXT: first check if of type integer then if in the right range
-            try:
-                pnext_int = int(pnext)
-            except ValueError:
-                print(f"Format error at line {line_index}: PNEXT must be an interger.")
-                sys.exit(1)
+        if not (0 <= mapq_int <= 2**8 - 1):
+            print(f"Format error at line {line_index}: MAPQ incorrect.")
+            sys.exit(1)
 
-            if not (0 <= pnext_int <= 2**31 - 1):
-                print(f"Format error at line {line_index}: pNEXT incorrect.")
-                sys.exit(1)
+        #CIGAR
+        if not re.fullmatch(r'\*|([0-9]+[MIDNSHPX=])+', cigar):
+            print(f"Format error at line {line_index}: CIGAR incorrect.")
+            sys.exit(1)
 
-            #TLEN: first check if of type integer then if in the right range
-            try:
-                tlen_int = int(tlen)
-            except ValueError:
-                print(f"Format error at line {line_index}: TLEN must be an interger.")
-                sys.exit(1)
+        #RNEXT
+        if not re.fullmatch(r'(?:\*|=|[0-9A-Za-z!#$%&+./:;?@^_|~-][0-9A-Za-z!#$%&*+./:;=?@^_|~-]*)', rnext):
+            print(f"Format error at line {line_index}: RNEXT incorrect.")
+            sys.exit(1)
 
-            if not (-2**31 + 1 <= tlen_int <= 2**31 - 1):
-                print(f"Format error at line {line_index}: TLEN incorrect.")
-                sys.exit(1)
+        #PNEXT: first check if of type integer then if in the right range
+        try:
+            pnext_int = int(pnext)
+        except ValueError:
+            print(f"Format error at line {line_index}: PNEXT must be an interger.")
+            sys.exit(1)
 
-            #SEQ
-            if not re.fullmatch(r'\*|[A-Za-z=.]+', seq):
-                print(f"Format error at line {line_index}: SEQ incorrect.")
-                sys.exit(1)   
+        if not (0 <= pnext_int <= 2**31 - 1):
+            print(f"Format error at line {line_index}: pNEXT incorrect.")
+            sys.exit(1)
 
-            #QUAL
-            if not re.fullmatch(r'\*|[!-~]+', qual):
-                print(f"Format error at line {line_index}: QUAL incorrect.")
-                sys.exit(1)     
+        #TLEN: first check if of type integer then if in the right range
+        try:
+            tlen_int = int(tlen)
+        except ValueError:
+            print(f"Format error at line {line_index}: TLEN must be an interger.")
+            sys.exit(1)
+
+        if not (-2**31 + 1 <= tlen_int <= 2**31 - 1):
+            print(f"Format error at line {line_index}: TLEN incorrect.")
+            sys.exit(1)
+
+        #SEQ
+        if not re.fullmatch(r'\*|[A-Za-z=.]+', seq):
+            print(f"Format error at line {line_index}: SEQ incorrect.")
+            sys.exit(1)   
+
+        #QUAL
+        if not re.fullmatch(r'\*|[!-~]+', qual):
+            print(f"Format error at line {line_index}: QUAL incorrect.")
+            sys.exit(1)     
     return True
 
 
@@ -186,33 +175,36 @@ def sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly):
     reads_extract = {chrom: [] for chrom in header_parsed.keys()}
 
     with open(input_file, "r") as file:
-        for line in file:
-            if line.startswith("@"): #skip header lines
-                continue
-            columns = line.strip().split("\t")
-                
-            #extract useful fields
-            qname = columns[0]
-            flag = int(columns[1])
-            pos = int(columns[3])
-            mapq = int(columns[4])
-            cigar = columns[5]
+        for line_index, line in enumerate(file,start=1):
 
-            #extract chromosome from RNAME
-            chromosome = columns[2]
+            if line_index > 50 or check(line, line_index): #check each line has all the mandatory fields for the 50 first lines (lazy evaluation) to avoid pb with heavy files
 
-            if fullyMappedOnly:
-                #filter fully mapped reads only
-                if not isFullyMapped(flag, cigar):
+                if line.startswith("@"): #skip header lines
                     continue
-            
-            if filterMAPQ is not None and mapq < filterMAPQ:
-                continue
+                columns = line.strip().split("\t")
+                    
+                #extract useful fields
+                qname = columns[0]
+                flag = int(columns[1])
+                pos = int(columns[3])
+                mapq = int(columns[4])
+                cigar = columns[5]
 
-            if chromosome not in reads_extract:
-                reads_extract[chromosome] = []            
+                #extract chromosome from RNAME
+                chromosome = columns[2]
 
-            reads_extract[chromosome].append((qname, flag, pos, mapq, cigar))
+                if fullyMappedOnly:
+                    #filter fully mapped reads only
+                    if not isFullyMapped(flag, cigar):
+                        continue
+                
+                if filterMAPQ is not None and mapq < filterMAPQ:
+                    continue
+
+                if chromosome not in reads_extract:
+                    reads_extract[chromosome] = []            
+
+                reads_extract[chromosome].append((qname, flag, pos, mapq, cigar))
 
     return reads_extract
 
@@ -357,9 +349,9 @@ def statIndel(reads_extract):
     
     return indel_dict
 
-def Summary(fileName, paired_orientation, count_chrom, count_mapq, stat_alignment, short_size, long_size, MAPQ_threshold, stat_indel):
+def Summary(fileName, dir_name, paired_orientation, count_chrom, count_mapq, stat_alignment, short_size, long_size, MAPQ_threshold, stat_indel):
     '''create a text file to summarize the results'''
-    with open(fileName, "w") as fileSummary: #open file in write mode
+    with open(os.path.join(dir_name, fileName), "w") as fileSummary: #open file in write mode
         fileSummary.write("===================================================== Summary of SAM file =====================================================\n\n")
 
         #table header
@@ -412,6 +404,8 @@ def Summary(fileName, paired_orientation, count_chrom, count_mapq, stat_alignmen
         fileSummary.write(f">{long_size}BP%: Percentage of reads with length greater than {long_size} bp\n")
         fileSummary.write(f"MEANL: Mean length of alignments\nMINL: Minimum length of alignments\nMAXL: Maximum length of alignments\n")
         fileSummary.write(f"INDEL%: Percentage of reads with at least one indel\n\n")
+
+    print(f"Summary of SAM file has been saved as \"{fileName}\" in directory \"{dir_name}\".")
 
 
 ################ STATISTICS ON FILTERED DATA ###############
@@ -521,7 +515,7 @@ def meanMAPQPerWindow(positions, header_parsed, window_size, MAPQ_threshold):
 
 ################ PLOTTING FUNCTION ###############
 
-def plotReadsPerWindow(reads_window, mapq_window, window_size):
+def plotReadsPerWindow(reads_window, mapq_window, window_size, dir_name):
     '''plot the number of reads per window on each chromosome, colored by mean MAPQ'''
 
     for chrom, counts in reads_window.items():
@@ -562,7 +556,10 @@ def plotReadsPerWindow(reads_window, mapq_window, window_size):
         
         plt.grid(axis='y')
         plt.tight_layout()
-        plt.show()
+        fig.savefig(os.path.join(dir_name, f"coverage_{chrom}.png"), dpi=300) #save the graph as an image
+        plt.close(fig)
+        print(f"Graph of coverage depth along the {chrom} has been saved as \"coverage_{chrom}.png\" in directory \"{dir_name}\".")
+
  
 
 ################ MAIN FUNCTION ###############
@@ -574,91 +571,117 @@ def main():
 
     input_file = sys.argv[1]
     
-    ## Check input file ##
-    check(input_file)
+    ## Check input file existence and extension ##
+    if not os.path.exists(input_file): #check existence
+        print("No file found")
+        sys.exit(1)
+    if not input_file.endswith(".sam"): #check extension
+        print("File must be in .sam format")
+        sys.exit(1)
+    
+    header_parsed = parse_header(input_file) #extract SN and LN for each chromosom (necessary to check plotting parameters input by user are correct)
 
     ## User inputs ##
 
-    # MAPQ threshold (optional) #
-    filterInput = input("Enter a MAPQ threshold to filter reads or press Enter to skip (default 0): ")
-    if filterInput == "":
-        filterMAPQ = None
+    #Do you want to use default settings?
+    defSettingsInput = input("Do you want to use default settings? (YES/no)")
+    if defSettingsInput.lower() in ["yes", "y", "oui", "o", "true", "t", ""]:
+        defSettings = True
     else:
-        try:
-            filterMAPQ = int(filterInput)
-            if not (0 <= filterMAPQ <= 60):
-                print("MAPQ threshold must be between 0 and 60.")
-                sys.exit(1)
-        except ValueError:
-            print("MAPQ threshold must be an integer.")
-            sys.exit(1)
-    
-    # Fully mapped reads only (mandatory) #
-    fullyMappedInput = input("Do you want to consider only fully mapped reads? (yes/NO): ")
-    if fullyMappedInput.lower() in ["yes", "y", "oui", "o", "true", "t"]:
-        fullyMappedOnly = True
-    else:
+        defSettings = False
+
+    if defSettings: #user want default settings
+
+        filterMAPQ = None 
         fullyMappedOnly = False
-
-    
-    ## Function on SAM file ##
-    header_parsed = parse_header(input_file)
-
-    # Window size for read distribution (mandatory) #
-    window_size_input = input("Enter window size for read distribution (default 15000): ")
-    if window_size_input == "":
-        window_size = 15000
-    else:
-        try:
-            window_size = int(window_size_input)
-            if window_size <= 0:
-                window_size = int(input("Window size must be a positive integer."))
-            
-            max_size = max(header_parsed.values())/2
-            if window_size > max_size:
-                window_size = int(input(f"Window size must be smaller than {max_size}."))
-                
-        except ValueError:
-            print("Window size must be an integer.")
-            sys.exit(1)
-
-    # Sizes for short and small reads
-
-    short_size_input = input("Enter a threshold size for small reads or press ENTER (default 80): ")
-    if short_size_input == "":
+        window_size = 30000
         short_size = 80
-    else:
-        try:
-            short_size = int(short_size_input)
-        except ValueError:
-            print("Size must be an integer.")
-            sys.exit(1)
-
-    long_size_input = input("Enter a threshold size for long reads or press ENTER (default 200): ")
-    if long_size_input == "":
         long_size = 200
-    else:
-        try:
-            long_size = int(long_size_input)
-        except ValueError:
-            print("Size must be an integer.")
-            sys.exit(1)
+
+    else: #user want to select his own settings
+        # MAPQ threshold (optional) #
+        filterInput = input("Enter a MAPQ threshold to filter reads or press Enter to skip (default 0): ")
+        if filterInput == "":
+            filterMAPQ = None
+        else:
+            while True: #infinite loop whose exit is the break
+                try:
+                    filterMAPQ = int(filterInput)
+                    while not (0 <= filterMAPQ <= 60):
+                        filterMAPQ = input("MAPQ threshold must be between 0 and 60. Try again: ")
+                    break #exit the infinite loop
+                except ValueError:
+                    filterInput = input("MAPQ threshold must be an integer. Try again: ")
+
+        
+        # Fully mapped reads only (mandatory) #
+        fullyMappedInput = input("Do you want to consider only fully mapped reads? (yes/NO): ")
+        if fullyMappedInput.lower() in ["yes", "y", "oui", "o", "true", "t"]:
+            fullyMappedOnly = True
+        else:
+            fullyMappedOnly = False
+        
+        # Window size for read distribution (mandatory) #
+        window_size_input = input("Enter window size for read distribution (default 30000): ")
+        if window_size_input == "":
+            window_size = 30000
+        else:
+            while True: #infinite loop whose exit is the break
+                try:
+                    window_size = int(window_size_input)
+                    while window_size <= 0:
+                        window_size = int(input("Window size must be a positive integer. Try again: "))
+                    
+                    max_size = max(header_parsed.values())/2
+                    while window_size > max_size:
+                        window_size = int(input(f"Window size must be smaller than {max_size}. Try again: "))
+                    break
+                        
+                except ValueError:
+                    window_size_input = input("Window size must be an integer. Try again: ")
+
+        # Sizes for short and small reads
+
+        short_size_input = input("Enter a threshold size for small reads or press ENTER (default 80): ")
+        if short_size_input == "":
+            short_size = 80
+        else:
+            while True: #infinite loop whose exit is the break
+                try:
+                    short_size = int(short_size_input)
+                    break
+                except ValueError:
+                    short_size_input = input("Size must be an integer. Try again: ")
+
+        long_size_input = input("Enter a threshold size for long reads or press ENTER (default 200): ")
+        if long_size_input == "":
+            long_size = 200
+        else:
+            while True: #infinite loop whose exit is the break
+                try:
+                    long_size = int(long_size_input)
+                    break
+                except ValueError:
+                    long_size_input = input("Size must be an integer. Try again: ")
 
     # Summary file name
 
     file_name_input = input("A summary file will be created in .txt format. How do you want to call it? (default summary.txt) ")
     
-    if " " in file_name_input: #avoid space in file name
-        file_name_input = input("File name must not contain \" \". Try again")
+    while " " in file_name_input: #avoid space in file name
+        file_name_input = input("File name must not contain \" \". Try again: ")
     
     if file_name_input == "": #default name
         file_name_input = "summary.txt"
     
     file_name = file_name_input
 
-    if not file_name.endswith(".txt"): #add extension if not existing
-        file_name += ".txt"
+    if not file_name.endswith(".txt"):
+        file_name += ".txt" 
     
+    dir_name = file_name.split(".")[0] #we create a subdirectory where we will save the graphs and summary (but we don't want it named as file bc it would cause errors!)
+    os.makedirs(dir_name, exist_ok = True) #exist_ok avoids error if directory already exist
+  
     ## Analysis of filtered data ##
     reads_extract = sam_reader(input_file, header_parsed, filterMAPQ, fullyMappedOnly) #reads with user filtering
 
@@ -676,12 +699,8 @@ def main():
     count_chrom = readCHROM(reads_extract)
     count_mapq = readMAPQ(reads_extract, MAPQ_threshold)
 
-    Summary(file_name, paired_orientation, count_chrom, count_mapq, stat_alignment, short_size, long_size, MAPQ_threshold, stat_indel)
-    plotReadsPerWindow(reads_window, mapq_window, window_size)
-
-
-    os.system("cat summary.txt")
-            
+    Summary(file_name, dir_name, paired_orientation, count_chrom, count_mapq, stat_alignment, short_size, long_size, MAPQ_threshold, stat_indel)
+    plotReadsPerWindow(reads_window, mapq_window, window_size, dir_name)            
 
 ############### LAUNCH THE SCRIPT ###############
 
